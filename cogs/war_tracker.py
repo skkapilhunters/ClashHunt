@@ -42,7 +42,7 @@ def init_mongodb():
         return False
     
     mongo_client = AsyncIOMotorClient(MONGO_URI)
-    db = mongo_client["fwa_war_bot"]
+    db = mongo_client["ClashHunt"]
     clans_collection = db["tracked_clans"]
     print("[Database] Successfully connected to MongoDB Cluster.")
     return True
