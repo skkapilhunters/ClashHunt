@@ -17,7 +17,6 @@ from modules.scraper import scrape_fwa_details
 # Load credentials from .env
 load_dotenv()
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
-COC_API_TOKEN = os.getenv("COC_API_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
 
 intents = discord.Intents.default()
@@ -117,13 +116,14 @@ async def generate_war_embed(clan_tag):
     """Queries CoC API and running scraper pipelines to compile an output layout."""
     clean_tag = clan_tag.upper().replace("#", "").strip()
     encoded_tag = urllib.parse.quote(f"#{clean_tag}")
-    url = f"https://api.clashofclans.com/v1/clans/{encoded_tag}/currentwar"
-    headers = {"Authorization": f"Bearer {COC_API_TOKEN}", "Accept": "application/json"}
+    # Replaced base URL with proxy and removed authorization headers
+    url = f"https://clash-hunt-api.vercel.app/proxy/v1/clans/{encoded_tag}/currentwar"
+    headers = {"Accept": "application/json"}
 
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers=headers) as response:
             if response.status != 200:
-                return None, None, f"CoC API Error (Status: {response.status})"
+                return None, None, f"Proxy CoC API Error (Status: {response.status})"
             war_data = await response.json()
 
     if war_data.get('state') == 'notInWar':
@@ -232,8 +232,9 @@ async def addclan(interaction: discord.Interaction, clan_tag: str):
         return
 
     encoded_tag = urllib.parse.quote(formatted_tag)
-    url = f"https://api.clashofclans.com/v1/clans/{encoded_tag}"
-    headers = {"Authorization": f"Bearer {COC_API_TOKEN}", "Accept": "application/json"}
+    # Replaced base URL with proxy and removed authorization headers
+    url = f"https://clash-hunt-api.vercel.app/proxy/v1/clans/{encoded_tag}"
+    headers = {"Accept": "application/json"}
     
     async with aiohttp.ClientSession() as session:
         async with session.get(url, headers=headers) as response:
@@ -332,7 +333,7 @@ async def on_ready():
         check_clan_war_loop.start()
 
 if __name__ == "__main__":
-    if not DISCORD_BOT_TOKEN or not COC_API_TOKEN:
-        print("[Critical Error] Tokens are missing! Check your local .env configuration script.")
+    if not DISCORD_BOT_TOKEN:
+        print("[Critical Error] DISCORD_BOT_TOKEN is missing! Check your local .env configuration script.")
     else:
         bot.run(DISCORD_BOT_TOKEN)
