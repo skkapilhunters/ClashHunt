@@ -4,7 +4,6 @@ from discord.ext import tasks, commands  # type: ignore
 from discord import app_commands  # type: ignore
 import aiohttp # type: ignore
 import os
-import urllib.parse
 from datetime import datetime, timezone
 from dotenv import load_dotenv  # type: ignore
 
@@ -22,6 +21,9 @@ MONGO_URI = os.getenv("MONGO_URI")
 intents = discord.Intents.default()
 intents.message_content = True  
 bot = commands.Bot(command_prefix="!", intents=intents)
+
+# PROXY CONFIGURATION
+BASE_GATEWAY = "https://clash-hunt-api.vercel.app/proxy"
 
 # MongoDB Global Database Client References
 mongo_client = None
@@ -114,16 +116,19 @@ def get_th_composition(members):
 
 async def generate_war_embed(clan_tag):
     """Queries CoC API and running scraper pipelines to compile an output layout."""
-    clean_tag = clan_tag.upper().replace("#", "").strip()
-    encoded_tag = urllib.parse.quote(f"#{clean_tag}")
-    # Replaced base URL with proxy and removed authorization headers
-    url = f"https://clash-hunt-api.vercel.app/proxy/v1/clans/{encoded_tag}/currentwar"
-    headers = {"Accept": "application/json"}
+    clean_tag = f"#{clan_tag.upper().replace('#', '').strip()}"
+    
+    # MODIFIED: Swapped out raw endpoint layout to point to proxy parameters
+    params = {
+        "endpoint": "clans",
+        "tag": clean_tag,
+        "suffix": "currentwar"
+    }
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers) as response:
+        async with session.get(BASE_GATEWAY, params=params) as response:
             if response.status != 200:
-                return None, None, f"Proxy CoC API Error (Status: {response.status})"
+                return None, None, f"Proxy Error (Status: {response.status})"
             war_data = await response.json()
 
     if war_data.get('state') == 'notInWar':
@@ -134,8 +139,8 @@ async def generate_war_embed(clan_tag):
     state = war_data.get('state')
     match_id = f"{opponent.get('tag')}-{state}"
 
-    print(f"[Main Bot] Scraping FWA metrics for #{clean_tag}...")
-    fwa_metrics = await asyncio.to_thread(scrape_fwa_details, f"#{clean_tag}")
+    print(f"[Main Bot] Scraping FWA metrics for {clean_tag}...")
+    fwa_metrics = await asyncio.to_thread(scrape_fwa_details, clean_tag)
 
     end_time = parse_coc_date(war_data.get('endTime'))
     time_left_text = "Unknown"
@@ -231,13 +236,15 @@ async def addclan(interaction: discord.Interaction, clan_tag: str):
         await interaction.followup.send(f"⚠️ `{formatted_tag}` is already tracked in <#{guild_clans[formatted_tag]['channel_id']}> on this server.")
         return
 
-    encoded_tag = urllib.parse.quote(formatted_tag)
-    # Replaced base URL with proxy and removed authorization headers
-    url = f"https://clash-hunt-api.vercel.app/proxy/v1/clans/{encoded_tag}"
-    headers = {"Accept": "application/json"}
+    # MODIFIED: Converted clan verification endpoint layout to route via proxy structural rules
+    params = {
+        "endpoint": "clans",
+        "tag": formatted_tag,
+        "suffix": ""
+    }
     
     async with aiohttp.ClientSession() as session:
-        async with session.get(url, headers=headers) as response:
+        async with session.get(BASE_GATEWAY, params=params) as response:
             if response.status != 200:
                 await interaction.followup.send("❌ Registration rejected. Please check the clan tag.")
                 return
@@ -321,19 +328,12 @@ async def on_ready():
         return
         
     print(f"Logged into Discord API as: {bot.user.name}")
-    print("Syncing slash commands with Discord global trees...")
-    try:
-        synced = await bot.tree.sync()
-        print(f"Successfully synchronized {len(synced)} application slash commands.")
-    except Exception as e:
-        print(f"Failed to sync application tree layouts: {e}")
-        
     print("-----------------------------------------------------")
     if not check_clan_war_loop.is_running():
         check_clan_war_loop.start()
 
 if __name__ == "__main__":
     if not DISCORD_BOT_TOKEN:
-        print("[Critical Error] DISCORD_BOT_TOKEN is missing! Check your local .env configuration script.")
+        print("[Critical Error] Discord Token is missing from your environment config!")
     else:
         bot.run(DISCORD_BOT_TOKEN)
