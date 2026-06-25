@@ -12,7 +12,7 @@ from motor.motor_asyncio import AsyncIOMotorClient  # type: ignore
 
 # Import our secondary scraper utility module
 from modules.scraper import scrape_fwa_details
-
+from bot_instance import bot
 # Load credentials from .env
 load_dotenv()
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
@@ -319,7 +319,7 @@ async def checkwar_command(interaction: discord.Interaction, clan_tag: str):
 
 
 # --- BOT EVENT HANDLERS ---
-@bot.event
+@bot.listen()
 async def on_ready():
     # Setup our asynchronous MongoDB cluster endpoints
     if not init_mongodb():
@@ -327,13 +327,11 @@ async def on_ready():
         await bot.close()
         return
         
-    print(f"Logged into Discord API as: {bot.user.name}")
+    print(f"[War Tracker Module] Database and tasks connected.")
     print("-----------------------------------------------------")
     if not check_clan_war_loop.is_running():
         check_clan_war_loop.start()
 
-if __name__ == "__main__":
-    if not DISCORD_BOT_TOKEN:
-        print("[Critical Error] Discord Token is missing from your environment config!")
-    else:
-        bot.run(DISCORD_BOT_TOKEN)
+# STANDALONE COG SETUP REGISTRATION
+async def setup(bot: commands.Bot):
+    print("[Module Loader] war_tracker cog initialized structurally.")
