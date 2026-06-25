@@ -1,0 +1,16 @@
+# ==========================================
+# Environment Variables & Secrets (CRITICAL)
+# ==========================================
+.env
+
+# Files
+/ .env
+#Folders
+__pycache__/
+/.venv/
+.vscode
+
+__pycache__/
+/.venv/
+.vscode/
+/platform-tools/
