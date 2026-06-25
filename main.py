@@ -1,7 +1,10 @@
 import os
+import asyncio
 from dotenv import load_dotenv
 # Directly import the working bot instance from your unchanged war_tracker file
 from cogs.war_tracker import bot
+# Import the web server task from your new page.py file
+from page import run_web_server
 
 load_dotenv()
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
@@ -24,6 +27,13 @@ async def dynamic_setup_hook():
 
 # Dynamically link the setup hook to your working bot
 bot.setup_hook = dynamic_setup_hook
+
+@bot.event
+async def on_ready():
+    print(f"✅ {bot.user.name} is online and connected to Discord!")
+    # This fires up the web server in the background as soon as the bot is ready
+    bot.loop.create_task(run_web_server())
+    print("[System] Web dashboard server has started successfully.")
 
 if __name__ == "__main__":
     if not DISCORD_BOT_TOKEN:
