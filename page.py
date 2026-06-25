@@ -2,6 +2,7 @@ import os
 import time
 from quart import Quart
 from cogs.war_tracker import bot  # Import bot to pull live stats
+import math  # Make sure this is imported at the very top of page.py
 
 app = Quart(__name__)
 
@@ -15,13 +16,35 @@ async def home():
     avatar_url = bot.user.avatar.url if bot.user and bot.user.avatar else "https://cdn.discordapp.com/embed/avatars/0.png"
     guild_count = len(bot.guilds)
     total_users = sum(g.member_count for g in bot.guilds) if bot.guilds else 0
-    latency = round(bot.latency * 1000) if bot.latency else 0
     
+    # SAFE LATENCY CHECK (Prevents float NaN crashes)
+    if bot.latency and not math.isnan(bot.latency):
+        latency = round(bot.latency * 1000)
+    else:
+        latency = 0   
+        
     # Simple uptime calculation
     uptime_seconds = int(time.time() - START_TIME)
     uptime_hours = uptime_seconds // 3600
     uptime_mins = (uptime_seconds % 3600) // 60
     uptime_string = f"{uptime_hours}h {uptime_mins}m"
+    
+# async def home():
+#     # Gather live statistics from your Discord bot safely
+#     bot_name = bot.user.name if bot.user else "Clan War Tracker"
+#     avatar_url = bot.user.avatar.url if bot.user and bot.user.avatar else "https://cdn.discordapp.com/embed/avatars/0.png"
+#     guild_count = len(bot.guilds)
+#     total_users = sum(g.member_count for g in bot.guilds) if bot.guilds else 0
+#  #   latency = round(bot.latency * 1000) if bot.latency else 0
+#  if bot.latency and not math.isnan(bot.latency):
+#     latency = round(bot.latency * 1000)
+# else:
+#     latency = 0   
+#     # Simple uptime calculation
+#     uptime_seconds = int(time.time() - START_TIME)
+#     uptime_hours = uptime_seconds // 3600
+#     uptime_mins = (uptime_seconds % 3600) // 60
+#     uptime_string = f"{uptime_hours}h {uptime_mins}m"
 
     return f"""
     <!DOCTYPE html>
