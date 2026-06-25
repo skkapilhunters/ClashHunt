@@ -5,6 +5,8 @@ from dotenv import load_dotenv
 from cogs.war_tracker import bot
 # Import the web server task from your new page.py file
 from page import run_web_server
+import discord
+bot.intents.members = True
 
 load_dotenv()
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
