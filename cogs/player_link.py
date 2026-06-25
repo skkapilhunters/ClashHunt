@@ -3,10 +3,8 @@ from discord.ext import commands
 from discord import app_commands
 import aiohttp
 import os
-import urllib.parse
 from motor.motor_asyncio import AsyncIOMotorClient
 
-COC_API_TOKEN = os.getenv("COC_API_TOKEN")
 MONGO_URI = os.getenv("MONGO_URI")
 MONGO_DB_NAME = os.getenv("MONGO_DB_NAME")
 MONGO_linked_players = os.getenv("MONGO_linked_players")
@@ -15,8 +13,11 @@ class PlayerLink(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.mongo_client = AsyncIOMotorClient(MONGO_URI)
-        self.db = self.mongo_client["MONGO_DB_NAME"]
-        self.players_collection = self.db["MONGO_linked_players"]
+        # FIXED: Removed quotes so it reads your actual environment variable values
+        self.db = self.mongo_client[MONGO_DB_NAME]
+        self.players_collection = self.db[MONGO_linked_players]
+        # Your reliable proxy engine gateway address
+        self.base_gateway = "https://clash-hunt-api.vercel.app/proxy"
 
     async def get_linked_tag(self, discord_id: int):
         user_data = await self.players_collection.find_one({"discord_id": discord_id})
@@ -26,13 +27,20 @@ class PlayerLink(commands.Cog):
     @app_commands.describe(player_tag="Your unique in-game player tag (e.g. #9URV90YY).")
     async def link_player(self, interaction: discord.Interaction, player_tag: str):
         await interaction.response.defer(ephemeral=True)
+        
+        # Clean up the tag text string layout natively
         formatted_tag = f"#{player_tag.upper().replace('#', '').strip()}"
-        encoded_tag = urllib.parse.quote(formatted_tag)
-        url = f"https://api.clashofclans.com/v1/players/{encoded_tag}"
-        headers = {"Authorization": f"Bearer {COC_API_TOKEN}", "Accept": "application/json"}
+        
+        # Set up parameters structurally for your proxy
+        params = {
+            "endpoint": "players",
+            "tag": formatted_tag,
+            "suffix": ""
+        }
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as response:
+            # Your proxy handles the keys, headers, and encoding automatically under the hood now!
+            async with session.get(self.base_gateway, params=params) as response:
                 if response.status != 200:
                     await interaction.followup.send("❌ Valid player tag not found.")
                     return
@@ -66,14 +74,17 @@ class PlayerLink(commands.Cog):
             await interaction.followup.send("❌ Link your profile first via `/link`.")
             return
 
-        encoded_tag = urllib.parse.quote(player_tag)
-        url = f"https://api.clashofclans.com/v1/players/{encoded_tag}"
-        headers = {"Authorization": f"Bearer {COC_API_TOKEN}", "Accept": "application/json"}
+        # Structure proxy layout parameters for routing profiles
+        params = {
+            "endpoint": "players",
+            "tag": player_tag,
+            "suffix": ""
+        }
 
         async with aiohttp.ClientSession() as session:
-            async with session.get(url, headers=headers) as response:
+            async with session.get(self.base_gateway, params=params) as response:
                 if response.status != 200:
-                    await interaction.followup.send("❌ Failed to contact CoC servers.")
+                    await interaction.followup.send("❌ Failed to contact CoC servers via proxy pipeline.")
                     return
                 p_data = await response.json()
 
