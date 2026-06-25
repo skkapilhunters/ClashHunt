@@ -56,7 +56,7 @@ class WarTracker(commands.Cog):
             return False
         
         self.mongo_client = AsyncIOMotorClient(MONGO_URI)
-        self.db = self.mongo_client["fwa_war_bot"]
+        self.db = self.mongo_client["ClashHunt"]
         self.clans_collection = self.db["tracked_clans"]
         print("[Database] WarTracker successfully connected to MongoDB Cluster.")
         
