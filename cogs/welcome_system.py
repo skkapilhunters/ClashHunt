@@ -6,7 +6,7 @@ class WelcomeSystem(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         # 🔽 REPLACE THIS WITH YOUR ACTUAL ENTRY CHANNEL ID
-        self.WELCOME_CHANNEL_ID = 123456789012345678 
+        self.WELCOME_CHANNEL_ID = 1519705626022777014 
 
     def generate_welcome_payload(self, member: discord.Member):
         """Helper function to keep the embed and content structure identical for both events."""
