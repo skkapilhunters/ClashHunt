@@ -2,7 +2,6 @@ import os
 import asyncio
 from dotenv import load_dotenv
 # Directly import the working bot instance from your unchanged war_tracker file
-from cogs.war_tracker import bot
 # Import the web server task from your new page.py file
 from page import run_web_server
 
