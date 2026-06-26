@@ -286,7 +286,7 @@ class WarTracker(commands.Cog):
             )
         await interaction.response.send_message(embed=embed)
 
-   @app_commands.command(name="checkwar", description="Instantly check live status for any server-tracked clan.")
+    @app_commands.command(name="checkwar", description="Instantly check live status for any server-tracked clan.")
     @app_commands.autocomplete(clan_tag=clan_autocomplete)
     @app_commands.describe(clan_tag="Select a clan from your server's registered dashboard list.")
     async def checkwar_command(self, interaction: discord.Interaction, clan_tag: str):
