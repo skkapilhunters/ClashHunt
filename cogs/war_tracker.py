@@ -286,24 +286,46 @@ class WarTracker(commands.Cog):
             )
         await interaction.response.send_message(embed=embed)
 
-    @app_commands.command(name="checkwar", description="Instantly check live status for any server-tracked clan.")
+   @app_commands.command(name="checkwar", description="Instantly check live status for any server-tracked clan.")
     @app_commands.autocomplete(clan_tag=clan_autocomplete)
     @app_commands.describe(clan_tag="Select a clan from your server's registered dashboard list.")
     async def checkwar_command(self, interaction: discord.Interaction, clan_tag: str):
         await interaction.response.defer(thinking=True)
         try:
-            embed, war_state, error = await self.generate_war_embed(clan_tag)
+            # 1. Debug Log: See what tag is arriving from the autocomplete
+            print(f"\n🔍 [DEBUG] /checkwar triggered for clan_tag input: '{clan_tag}'")
+            
+            # 2. Run the embed generator
+            result = await self.generate_war_embed(clan_tag)
+            
+            # 3. Debug Log: See exactly what the generator returned
+            print(f"📊 [DEBUG] generate_war_embed returned type: {type(result)} | value: {result}")
+            
+            # Unpack the 3 variables securely
+            embed, war_state, error = result
+            
             if error:
+                print(f"❌ [DEBUG] generate_war_embed reported an operational error: {error}")
                 await interaction.followup.send(f"❌ Error compiling log layout: `{error}`")
                 return
+                
             if war_state == "notInWar":
+                print(f"🛡️ [DEBUG] Clan is verified to be NOT in war.")
                 await interaction.followup.send(f"🛡️ The clan `{clan_tag.upper()}` is not in an active war.")
                 return
 
+            # If everything goes right, send the embed structure
+            print(f"✅ [DEBUG] Sending completed embed layout response to Discord channel.")
             await interaction.followup.send(embed=embed)
+            
         except Exception as e:
-            await interaction.followup.send("❌ Internal database or parsing pipeline crash.")
-            print(f"[Command Exception] {e}")
+            # 🔥 CRITICAL: This will print the EXACT traceback error, line numbers, and details to your Render logs!
+            import traceback
+            print("\n🚨 ====== [CRITICAL CHECKWAR EXCEPTION TRACEBACK] ======")
+            traceback.print_exc()
+            print("========================================================\n")
+            
+            await interaction.followup.send(f"❌ Internal pipeline crash: `{str(e)}`")
 
 
 # STANDALONE COG SETUP REGISTRATION
