@@ -1,11 +1,42 @@
 import urllib.parse
+import os
+import subprocess
+import sys
 from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+
+def auto_install_playwright_browsers():
+    """Checks if playwright binaries are missing and installs them automatically."""
+    try:
+        # Check if the browser executable exists or if we need to force install it
+        with sync_playwright() as p:
+            # We try a quick launch check to see if dependencies are configured
+            browser = p.chromium.launch(headless=True)
+            browser.close()
+    except Exception as e:
+        # If it throws an error stating executable doesn't exist, execute automatic recovery
+        if "Executable doesn't exist" in str(e) or "playwright install" in str(e).lower():
+            print("\n⚠️ [Playwright Boot] Headless browser binaries missing. Triggering automatic installation...")
+            try:
+                # Executes 'playwright install chromium' securely via system terminal environment
+                subprocess.run(
+                    [sys.executable, "-m", "playwright", "install", "chromium"], 
+                    check=True
+                )
+                print("✅ [Playwright Boot] Chromium dependencies installed successfully!\n")
+            except Exception as install_error:
+                print(f"❌ [Playwright Boot Error] Failed to run automated installation: {install_error}")
+        else:
+            # If it's a different runtime error, print it out so it doesn't stay hidden
+            print(f"[Playwright Boot Warning] Checked system binaries, status: {e}")
 
 def scrape_fwa_details(clan_tag):
     """
     SECONDARY UTILITY FUNCTION: 
     Scrapes FWA details for a specific clan tag and returns data to the main bot.
     """
+    # 🔥 Run the automatic check and installation sequence before attempting to launch the browser
+    auto_install_playwright_browsers()
+
     clean_tag = clan_tag.replace("#", "").strip()
     
     # Default fallback data if the site fails or times out
@@ -17,10 +48,10 @@ def scrape_fwa_details(clan_tag):
     }
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True) 
-        page = browser.new_page()
-        
         try:
+            browser = p.chromium.launch(headless=True) 
+            page = browser.new_page()
+            
             page.goto(f"https://points.fwafarm.com/clan?tag={clean_tag}", timeout=25000)
             page.wait_for_load_state("networkidle")
             
@@ -62,7 +93,10 @@ def scrape_fwa_details(clan_tag):
         except Exception as e:
             print(f"[Scraper Error] Unexpected background issue: {e}")
         finally:
-            browser.close()
+            try:
+                browser.close()
+            except Exception:
+                pass
             
     return data
 
