@@ -170,7 +170,7 @@ class WarTracker(commands.Cog):
         )
 
         embed.add_field(name=field_title, value=field_value, inline=False)
-        return embed, match_id, None
+        return embed, match_id, None  # 🔥 FIXED: Added ', None' for the error parameter to unpack correctly!
 
     # --- SERVER-AWARE BACKGROUND TASK LOOP ---
     @tasks.loop(minutes=15)
