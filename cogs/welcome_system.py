@@ -3,7 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 
 class WelcomeSystem(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
         # 🔽 REPLACE THIS WITH YOUR ACTUAL ENTRY CHANNEL ID
         self.WELCOME_CHANNEL_ID = 1519705626022777014 
@@ -34,35 +34,46 @@ class WelcomeSystem(commands.Cog):
     @commands.Cog.listener()
     async def on_member_join(self, member: discord.Member):
         """Triggers automatically when someone joins the server."""
+        # Wait until the bot cache is fully ready
+        await self.bot.wait_until_ready()
+        
         channel = self.bot.get_channel(self.WELCOME_CHANNEL_ID)
         if not channel:
+            print(f"[Welcome Error] Could not find channel with ID {self.WELCOME_CHANNEL_ID}")
             return
         
-        content, embed = self.generate_welcome_payload(member)
-        await channel.send(content=content, embed=embed)
+        try:
+            content, embed = self.generate_welcome_payload(member)
+            await channel.send(content=content, embed=embed)
+            print(f"[Welcome System] Automatically welcomed {member.name} successfully.")
+        except Exception as e:
+            print(f"[Welcome System Error] Failed to auto-send message: {e}")
 
+    # 🔥 Hides the command completely from regular users in the Discord UI menu
     @app_commands.command(name="setwelcome", description="Manually send the welcome embed for a specific user.")
     @app_commands.describe(user="The member you want to welcome")
-    @app_commands.checks.has_permissions(administrator=True) # Restricts to Admins only
+    @app_commands.default_permissions(administrator=True) 
+    @app_commands.guild_only() # Prevents users from trying to run it in bot DMs
     async def setwelcome(self, interaction: discord.Interaction, user: discord.Member):
         """Admin-only slash command to manually trigger the message."""
+        await interaction.response.defer(ephemeral=True)
+        
         channel = self.bot.get_channel(self.WELCOME_CHANNEL_ID)
         if not channel:
-            await interaction.response.send_message("❌ Welcome channel not found. Check the configuration ID.", ephemeral=True)
+            await interaction.followup.send("❌ Welcome channel not found. Check the configuration ID.", ephemeral=True)
             return
 
-        # Send the payload to the welcome channel
-        content, embed = self.generate_welcome_payload(user)
-        await channel.send(content=content, embed=embed)
-        
-        # Give the admin a private confirmation response so the chat doesn't get cluttered
-        await interaction.response.send_message(f"✅ Welcome message sent successfully for {user.mention}!", ephemeral=True)
+        try:
+            # Send the payload to the welcome channel
+            content, embed = self.generate_welcome_payload(user)
+            await channel.send(content=content, embed=embed)
+            
+            # Give the admin a private confirmation response
+            await interaction.followup.send(f"✅ Welcome message sent successfully for {user.mention}!", ephemeral=True)
+        except Exception as e:
+            await interaction.followup.send(f"❌ Failed to send welcome payload: {e}", ephemeral=True)
 
-    @setwelcome.error
-    async def setwelcome_error(self, interaction: discord.Interaction, error: app_commands.AppCommandError):
-        """Handles error if a non-admin tries to run the command."""
-        if isinstance(error, app_commands.MissingPermissions):
-            await interaction.response.send_message("❌ You do not have permission to use this command. Only Administrators can use it.", ephemeral=True)
 
-async def setup(bot):
+async def setup(bot: commands.Bot):
     await bot.add_cog(WelcomeSystem(bot))
+    print("[Module Loader] welcome_system cog loaded successfully.")
