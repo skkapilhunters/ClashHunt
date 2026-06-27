@@ -165,6 +165,8 @@ class WarTracker(commands.Cog):
             f"**Team Size:** {war_data.get('teamSize')} vs {war_data.get('teamSize')}\n"
             f"**Ends in:** {time_left_text}\n\n"
             f"**Points Balance:** {fwa_metrics['point_balance']}\n\n"
+            f"**CC Link:** [Link](https://link.clashofclans.com/en?action=OpenClanProfile&tag={clean_our_tag})\n"
+            f"**Points Check:** [Check](https://points.fwafarm.com/clan?tag={clean_our_tag})\n\n"
             f"**{clan.get('name')} Composition**\n{our_comp}\n\n"
             f"**{opponent.get('name')} Composition**\n{enemy_comp}"
         )
