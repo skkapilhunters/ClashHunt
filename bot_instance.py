@@ -1,8 +1,14 @@
+
+# In your bot initialization file (e.g., bot_instance.py)
+import os
 import discord
 from discord.ext import commands
 
-intents = discord.Intents.default()
-intents.message_content = True  
-intents.members = True  # 🔥 CRITICAL: Add this line so on_member_join works!
+# If you get a proxy URL from a service like Webshare or a free rotation proxy:
+PROXY_URL = os.getenv("PROXY_URL") # e.g., http://username:password@proxy_ip:port
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+bot = commands.Bot(
+    command_prefix="!", 
+    intents=discord.Intents.default(),
+    proxy=PROXY_URL  # Routes Discord API traffic through a clean IP
+)
