@@ -9,6 +9,6 @@ PROXY_URL = os.getenv("PROXY_URL") # e.g., http://username:password@proxy_ip:por
 
 bot = commands.Bot(
     command_prefix="!", 
-    intents=discord.Intents.default(),
-    proxy=PROXY_URL  # Routes Discord API traffic through a clean IP
+    proxy=PROXY_URL,  # Routes Discord API traffic through a clean IP
+    intents=discord.Intents.default()
 )
