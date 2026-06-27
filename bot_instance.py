@@ -12,5 +12,7 @@ prefixes = ["!", "?", "$", ";", "%"]
 bot = commands.Bot(
     command_prefix=prefixes,  # Now accepts any of the prefixes in the list
     proxy=PROXY_URL,          # Routes Discord API traffic through a clean IP
-    intents=discord.Intents.default()
+    intents=discord.Intents.default(),
+    intents.members = True,          # Required to track roles/fetch members
+    intents.message_content = True  # Required for prefixes like ? or !
 )
