@@ -1,15 +1,33 @@
 import os
 import asyncio
+import subprocess
+import sys
 from dotenv import load_dotenv
 # Directly import the working bot instance from your unchanged war_tracker file
 from bot_instance import bot
 # Import the web server task from your new page.py file
 from page import run_web_server
 import discord
+
 bot.intents.members = True
 
 load_dotenv()
 DISCORD_BOT_TOKEN = os.getenv("DISCORD_BOT_TOKEN")
+
+def auto_install_playwright():
+    """Automatically downloads the required Playwright Chromium binaries at startup."""
+    print("-----------------------------------------------------")
+    print("[Playwright Boot] Verifying headless browser binaries...")
+    try:
+        # Run the installation command synchronously before the bot loop blocks the thread
+        subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "chromium"], 
+            check=True
+        )
+        print("✅ [Playwright Boot] Chromium dependencies verified and ready!")
+    except Exception as e:
+        print(f"❌ [Playwright Boot Error] Automated installation failed: {e}")
+    print("-----------------------------------------------------")
 
 async def dynamic_setup_hook():
     """Scans the cogs folder for any new functions we add in the future."""
@@ -41,5 +59,8 @@ if __name__ == "__main__":
     if not DISCORD_BOT_TOKEN:
         print("[Critical Error] DISCORD_BOT_TOKEN is missing from your .env file!")
     else:
-        # Start the bot using your token
+        # 1. Trigger the browser dependency installer first
+        auto_install_playwright()
+        
+        # 2. Start the bot using your token
         bot.run(DISCORD_BOT_TOKEN)
