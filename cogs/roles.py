@@ -11,8 +11,7 @@ class RoleManager(commands.Cog):
         # Pull MongoDB URI directly from your .env setup
         mongo_uri = os.getenv("MONGO_URI")
         if not mongo_uri:
-            print("❌ [Roles Cog] Error: 'MONGO_URI' not found in .env!")
-            return
+            raise ValueError("❌ [Roles Cog] Error: 'MONGO_URI' not found in environment variables!")
 
         # Initialize Async MongoClient
         self.db_client = motor.motor_asyncio.AsyncIOMotorClient(mongo_uri)
@@ -26,7 +25,7 @@ class RoleManager(commands.Cog):
         self.check_temp_roles.cancel()
 
     # ==========================================
-    # 1. PERMANENT ROLE COMMAND (?role123)
+    # 1. PERMANENT ROLE COMMAND (?admin)
     # ==========================================
     @commands.command(name="admin")
     async def give_perm_role(self, ctx):
@@ -46,7 +45,7 @@ class RoleManager(commands.Cog):
             await ctx.send("❌ My role hierarchy is too low to assign this role!")
 
     # ==========================================
-    # 2. TEMPORARY ROLE COMMAND (?role456)
+    # 2. TEMPORARY ROLE COMMAND (?admin7)
     # ==========================================
     @commands.command(name="admin7")
     async def give_temp_role(self, ctx):
@@ -99,16 +98,27 @@ class RoleManager(commands.Cog):
 
             for record in expired_records:
                 guild = self.bot.get_guild(record["guild_id"])
-                if guild:
-                    member = guild.get_member(record["user_id"])
-                    role = guild.get_role(record["role_id"])
+                if not guild:
+                    continue  # Bot left the server, skip
+                
+                # FIX: Try cache first, fallback to an API fetch if cache is blank
+                member = guild.get_member(record["user_id"])
+                if not member:
+                    try:
+                        member = await guild.fetch_member(record["user_id"])
+                    except discord.NotFound:
+                        # User left the server, clean up database record safely
+                        await self.collection.delete_one({"_id": record["_id"]})
+                        continue
 
-                    if member and role and role in member.roles:
-                        try:
-                            await member.remove_roles(role)
-                            print(f"🗑️ Removed expired temporary role {role.name} from {member.name}")
-                        except discord.Forbidden:
-                            print(f"⚠️ Permissions missing to strip role in guild: {guild.name}")
+                role = guild.get_role(record["role_id"])
+
+                if member and role and role in member.roles:
+                    try:
+                        await member.remove_roles(role)
+                        print(f"🗑️ Removed expired temporary role {role.name} from {member.name}")
+                    except discord.Forbidden:
+                        print(f"⚠️ Permissions missing to strip role in guild: {guild.name}")
                 
                 # Delete tracking record out of MongoDB after processing
                 await self.collection.delete_one({"_id": record["_id"]})
