@@ -15,7 +15,7 @@ class RoleManager(commands.Cog):
 
         # Initialize Async MongoClient
         self.db_client = motor.motor_asyncio.AsyncIOMotorClient(mongo_uri)
-        self.db = self.db_client["discord_bot_db"]        # Your database name
+        self.db = self.db_client["ClashHunt"]        # Your database name
         self.collection = self.db["temporary_roles"]     # Your collection name
         
         # Start the background checking loop automatically
