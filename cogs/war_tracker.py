@@ -43,7 +43,6 @@ class WarTracker(commands.Cog):
         self.mongo_client = None
         self.db = None
         self.clans_collection = None
-        self.active_wars = {}
         
         # Safely trigger database and background task setup loops
         self.init_mongodb()
@@ -66,10 +65,18 @@ class WarTracker(commands.Cog):
         return True
 
     async def db_add_clan(self, tag, name, channel_id, guild_id):
+        # We also initialize last_match_id as None for brand new tracks
         await self.clans_collection.update_one(
             {"clan_tag": tag, "guild_id": guild_id},
-            {"$set": {"clan_name": name, "channel_id": channel_id}},
+            {"$set": {"clan_name": name, "channel_id": channel_id}, "$setOnInsert": {"last_match_id": None}},
             upsert=True
+        )
+
+    async def db_update_last_match(self, tag, guild_id, match_id):
+        """Updates the stored match ID state permanently in the database."""
+        await self.clans_collection.update_one(
+            {"clan_tag": tag, "guild_id": guild_id},
+            {"$set": {"last_match_id": match_id}}
         )
 
     async def db_remove_clan(self, tag, guild_id):
@@ -172,10 +179,10 @@ class WarTracker(commands.Cog):
         )
 
         embed.add_field(name=field_title, value=field_value, inline=False)
-        return embed, match_id, None  # 🔥 FIXED: Added ', None' for the error parameter to unpack correctly!
+        return embed, match_id, None
 
-    # --- SERVER-AWARE BACKGROUND TASK LOOP ---
-    @tasks.loop(minutes=15)
+    # --- SERVER-AWARE BACKGROUND TASK LOOP (Optimized for 10 Min & DB Persistence) ---
+    @tasks.loop(minutes=10)
     async def check_clan_war_loop(self):
         await self.bot.wait_until_ready()
         all_tracked_entries = await self.db_get_all_global_clans()
@@ -187,24 +194,30 @@ class WarTracker(commands.Cog):
             tag = document["clan_tag"]
             guild_id = document["guild_id"]
             channel_id = document["channel_id"]
+            last_match_id = document.get("last_match_id") # Grab the last match record from database
             
             channel = self.bot.get_channel(channel_id)
             if not channel: continue
 
-            cache_key = f"{guild_id}-{tag}"
-
             try:
                 embed, match_id, error = await self.generate_war_embed(tag)
+                
+                # Handling errors or when clan is completely out of war
                 if error or match_id == "notInWar":
-                    self.active_wars[cache_key] = None
+                    if last_match_id != "notInWar":
+                        await self.db_update_last_match(tag, guild_id, "notInWar")
                     continue
 
-                if self.active_wars.get(cache_key) == match_id:
+                # 🔥 DB INTEGRITY CHECK: If match matches the stored persistent database code, SKIP!
+                if last_match_id == match_id:
                     continue
 
+                # If it's a completely new match identifier or update, send the alert message
                 await channel.send(embed=embed)
-                print(f"[Loop Success] Update posted for {tag} on Guild: {guild_id}")
-                self.active_wars[cache_key] = match_id
+                print(f"[Loop Success] Permanent DB match change posted for {tag} on Guild: {guild_id}")
+                
+                # Instantly save state to database so reboots do not send it again
+                await self.db_update_last_match(tag, guild_id, match_id)
 
             except Exception as e:
                 print(f"[Loop Exception] Tracking error on {tag} for guild {guild_id}: {e}")
@@ -263,11 +276,7 @@ class WarTracker(commands.Cog):
             return
 
         name = guild_clans[formatted_tag]["clan_name"]
-        
         await self.db_remove_clan(formatted_tag, interaction.guild_id)
-        cache_key = f"{interaction.guild_id}-{formatted_tag}"
-        if cache_key in self.active_wars: del self.active_wars[cache_key]
-
         await interaction.response.send_message(f"🗑️ Wiped server logging records for **{name}** (`{formatted_tag}`).", ephemeral=True)
 
     @app_commands.command(name="listclans", description="Show clans currently tracked inside this server.")
@@ -294,16 +303,10 @@ class WarTracker(commands.Cog):
     async def checkwar_command(self, interaction: discord.Interaction, clan_tag: str):
         await interaction.response.defer(thinking=True)
         try:
-            # 1. Debug Log: See what tag is arriving from the autocomplete
             print(f"\n🔍 [DEBUG] /checkwar triggered for clan_tag input: '{clan_tag}'")
-            
-            # 2. Run the embed generator
             result = await self.generate_war_embed(clan_tag)
-            
-            # 3. Debug Log: See exactly what the generator returned
             print(f"📊 [DEBUG] generate_war_embed returned type: {type(result)} | value: {result}")
             
-            # Unpack the 3 variables securely
             embed, war_state, error = result
             
             if error:
@@ -316,17 +319,14 @@ class WarTracker(commands.Cog):
                 await interaction.followup.send(f"🛡️ The clan `{clan_tag.upper()}` is not in an active war.")
                 return
 
-            # If everything goes right, send the embed structure
             print(f"✅ [DEBUG] Sending completed embed layout response to Discord channel.")
             await interaction.followup.send(embed=embed)
             
         except Exception as e:
-            # 🔥 CRITICAL: This will print the EXACT traceback error, line numbers, and details to your Render logs!
             import traceback
             print("\n🚨 ====== [CRITICAL CHECKWAR EXCEPTION TRACEBACK] ======")
             traceback.print_exc()
             print("========================================================\n")
-            
             await interaction.followup.send(f"❌ Internal pipeline crash: `{str(e)}`")
 
 
