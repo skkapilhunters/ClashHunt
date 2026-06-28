@@ -6,7 +6,7 @@ from pymongo import MongoClient  # 👈 Added MongoDB client
 
 # 🛠️ MongoDB Configuration
 # Replace this connection string with your actual MongoDB URI if hosting on Atlas
-MONGO_URI = "mongodb+srv://jindelkapil_db_user:3HqzFlgm21qvktn4@clashhunt.0glfntn.mongodb.net/?appName=ClashHunt" 
+MONGO_URI = os.getenv("MONGO_URI")
 DB_NAME = "ClashHunt"
 COLLECTION_NAME = "player_timers"
 
