@@ -27,7 +27,7 @@ class PushCommandCog(commands.Cog):
             "author_id": ctx.author.id
         }
         
-        one_time_url = f"{RENDER_SITE_URL}/{secret_token}"
+        one_time_url = f"{RENDER_SITE_URL}/push/{secret_token}"
         
         # Build an interactive embed response
         embed = discord.Embed(
