@@ -1,54 +1,53 @@
 import discord
-from discord import app_commands
 from discord.ext import commands
-# Import your existing function from local_logger.py
-from local_logger import save_to_history
+import uuid
+import asyncio
+# Import the shared token system from your page module
+from page import ACTIVE_TOKENS
 
-# Define the Interactive Pop-Up Window (Modal)
-class PushDataModal(discord.ui.Modal, title="Push Player Timers Data"):
-    # The large multi-line text input field where you paste the JSON string
-    json_input = discord.ui.TextInput(
-        label="Paste Raw Data String",
-        style=discord.TextStyle.long,
-        placeholder="Paste the raw JSON data containing tags and timers here...",
-        required=True,
-        max_length=4000 # Discord text input limit
-    )
+# Change this to your actual Render app URL (e.g., https://clashhunt-bot.onrender.com)
+RENDER_SITE_URL = "https://clashhunt.onrender.com"
 
-    async def on_submit(self, interaction: discord.Interaction):
-        # Acknowledge the interaction immediately to prevent timeouts
-        await interaction.response.defer(ephemeral=True)
-        
-        raw_string = self.json_input.value
-        
-        try:
-            # Send the text to your working local_logger logic
-            save_to_history(raw_string)
-            await interaction.followup.send("✅ Data processed! Local files updated and synchronized with MongoDB.", ephemeral=True)
-        except Exception as e:
-            await interaction.followup.send(f"❌ Failed to process data: {e}", ephemeral=True)
-
-# Define the Cog containing the Slash Command
 class PushCommandCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-    # Listen for when the bot is ready to sync slash commands to Discord globally
-    @commands.Cog.listener()
-    async def on_ready(self):
-        try:
-            # Syncs slash commands globally so you can see them across servers
-            await self.bot.tree.sync()
-            print("[System] Slash commands synced successfully.")
-        except Exception as e:
-            print(f"[System Error] Failed to sync slash commands: {e}")
+    @commands.command(name="push", prefix="?")
+    @commands.has_permissions(manage_messages=True)
+    async def generate_push_link(self, ctx):
+        """Generates a secure, temporary web page URL to paste massive data blocks."""
+        
+        # Generate a high-entropy random token link
+        secret_token = str(uuid.uuid4())
+        
+        # Register token with context details
+        ACTIVE_TOKENS[secret_token] = {
+            "bot": self.bot,
+            "channel_id": ctx.channel.id,
+            "author_id": ctx.author.id
+        }
+        
+        one_time_url = f"{RENDER_SITE_URL}/{secret_token}"
+        
+        # Build an interactive embed response
+        embed = discord.Embed(
+            title="🔗 Secure Data Portal Generated",
+            description="Since your raw data is too massive for Discord, use the link below to paste it directly into our web portal.",
+            color=discord.Color.blue()
+        )
+        embed.add_field(name="🌐 Submission Link", value=f"[Click Here to Open Submission Portal]({one_time_url})", inline=False)
+        embed.set_footer(text="⚠️ Notice: This link is single-use and expires automatically in 10 minutes.")
+        
+        # Send it as an ephemeral/direct notice if possible, or right in the channel
+        await ctx.send(embed=embed, delete_after=600) # Auto-removes message from chat logs in 10 minutes
 
-    # The actual slash command definition
-    @app_commands.command(name="push", description="Open a text box window to submit raw player data directly to MongoDB.")
-    @app_commands.checks.has_permissions(manage_messages=True)
-    async def push_data(self, interaction: discord.Interaction):
-        # Open the modal directly on the user's screen
-        await interaction.response.send_modal(PushDataModal())
+        # Optional auto-expiry cleaner task if they don't use it
+        async def expire_token():
+            await asyncio.sleep(600) # 10 minutes
+            if secret_token in ACTIVE_TOKENS:
+                ACTIVE_TOKENS.pop(secret_token, None)
+                
+        self.bot.loop.create_task(expire_token())
 
 async def setup(bot):
     await bot.add_cog(PushCommandCog(bot))
