@@ -6,7 +6,7 @@ from discord.ext import commands, tasks
 from supabase import create_client, Client
 
 # Configure your target Discord Channel ID where new mails should automatically post
-NOTIFY_CHANNEL_ID = 123456789012345678  # 👈 Replace this with your actual Channel ID
+NOTIFY_CHANNEL_ID = 1521142308966371332  # 👈 Replace this with your actual Channel ID
 
 class MailLinkButton(discord.ui.View):
     """Adds a dynamic link button below the embed targeting your dashboard."""
