@@ -140,7 +140,7 @@ class InboxCog(commands.Cog):
                     
                     # Target ping string can go here (e.g. content="@role")
                     await channel.send(
-                        content=f"🔔 **New Mail Received**\n**Subject : {latest_record.get('subject', 'No Subject')}**", 
+                        content=f"**Subject : {latest_record.get('subject', 'No Subject')}**", 
                         embed=embed, 
                         view=view
                     )
