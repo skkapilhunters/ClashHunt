@@ -1,9 +1,22 @@
-# cogs/inbox_cog.py
 import os
+import re
 import asyncio
 import discord
 from discord.ext import commands
 from supabase import create_client, Client
+
+class MailLinkButton(discord.ui.View):
+    """Adds a dynamic link button below the embed targeting your dashboard."""
+    def __init__(self, record_id):
+        super().__init__()
+        # Replace this URL with your actual website base path
+        dashboard_url = f"https://mail.admin.com/view?id={record_id}"
+        self.add_item(discord.ui.Button(
+            label="View Complete Mail", 
+            url=dashboard_url, 
+            style=discord.ButtonStyle.link,
+            emoji="🔗"
+        ))
 
 class InboxCog(commands.Cog):
     def __init__(self, bot):
@@ -20,30 +33,60 @@ class InboxCog(commands.Cog):
             self.supabase: Client = create_client(supabase_url, supabase_key)
 
     def create_mail_embed(self, record, current_index, total_count):
-        """Helper function to build a consistent mail embed."""
-        sender = record.get("sender") or "Unknown Sender"
-        recipient = record.get("recipient") or "Unknown Recipient"
+        """Builds an optimized, premium layout matching the user template with conditional OTP fields."""
+        sender_name = record.get("sender_name") or "Sender's Name"
+        sender_mail = record.get("sender_mail") or record.get("sender") or "info@mail.admin.com"
+        recipient = record.get("recipient") or record.get("to") or "beta@mail.admin.com"
         subject = record.get("subject") or "(No Subject)"
         
         body = record.get("body_text") or record.get("raw_body") or "No content."
+        
+        # 1. Scanning and isolating an OTP code dynamically
+        # Looks for standard 4-8 digit numeric codes inside the text
+        otp_match = re.search(r'\b\d{4,8}\b', body) or re.search(r'\b\d{4,8}\b', subject)
+        otp_code = otp_match.group(0) if otp_match else None
+
+        # Truncate content body to safeguard Discord payload character limits
         if len(body) > 1000:
             body = body[:997] + "..."
 
+        # 2. Replicating the user's signature visual styles
         embed = discord.Embed(
-            title=f"✉️ {subject}",
-            description=body,
-            color=discord.Color.blue()
+            title=f"✨ **Todays Mail** : {record.get('created_at', '2026-06-29')[:10]} ✨",
+            color=10052095 # Matching user palette color decimal
         )
-        embed.add_field(name="From", value=sender, inline=True)
-        embed.add_field(name="To", value=recipient, inline=True)
         
+        # Static asset setup using your custom template icons
+        icon_url = "https://media.discordapp.net/attachments/1519257143721590864/1519324369963188346/download.png"
+        embed.set_thumbnail(url=icon_url)
+
+        # Structure field lines perfectly
+        embed.add_field(name="From", value=sender_name, inline=True)
+        embed.add_field(name="Sender Mail", value=sender_mail, inline=True)
+        embed.add_field(name="To", value=recipient, inline=False)
+        
+        # Conditional Logic: Only append OTP area if an explicit target is matched
+        if otp_code:
+            embed.add_field(name="OTP (Tap to Copy)", value=f"`{otp_code}`", inline=False)
+
+        embed.add_field(name="Content", value=body, inline=False)
+        
+        # Parsing attachment links cleanly
         attachments = record.get("attachments", [])
         if attachments and len(attachments) > 0:
-            embed.add_field(name="📎 Attachments", value=f"{len(attachments)} file(s) attached", inline=False)
+            attach_str = ""
+            for i, att in enumerate(attachments[:2]): # Cap preview text strings to 2
+                emoji = "<:sub_entry_one:1519326682891288666>" if i == 0 else "<:sub_entry_two:1519326714679918632>"
+                url = att.get("url", "https://mail.admin.com")
+                name = att.get("name", f"Attachment {i+1}")
+                attach_str += f"{emoji} **{name}** : **[Click Here ]({url})**\n"
+            embed.add_field(name="Attachments :", value=attach_str, inline=False)
 
-        # Track what number email we are viewing in the footer
-        created_at = record.get("created_at", "Unknown time")
-        embed.set_footer(text=f"Email {current_index + 1} of {total_count} • Received: {created_at}")
+        # Track history details inside the footer template
+        embed.set_footer(
+            text=f"✧ Mail12599 ✧ Email {current_index + 1} of {total_count}",
+            icon_url=icon_url
+        )
         return embed
 
     @commands.command(name="latest_mail", aliases=["inbox"])
@@ -58,8 +101,13 @@ class InboxCog(commands.Cog):
                 if not response.data:
                     return await ctx.send("📭 The inbox database is currently empty.")
                 
-                embed = self.create_mail_embed(response.data[0], 0, 1)
-                await ctx.send(embed=embed)
+                record = response.data[0]
+                embed = self.create_mail_embed(record, 0, 1)
+                
+                # Attach modern Action Row components directly via discord.py
+                view = MailLinkButton(record_id=record.get("id", "0"))
+                
+                await ctx.send(content=f"**Subject : {record.get('subject', 'Test with data')}**", embed=embed, view=view)
             except Exception as e:
                 print(f"❌ Error: {e}")
                 await ctx.send("⚠️ An error occurred while fetching data.")
@@ -72,67 +120,57 @@ class InboxCog(commands.Cog):
 
         async with ctx.typing():
             try:
-                # Fetch up to the last 20 emails ordered newest to oldest
                 response = self.supabase.table("inbox").select("*").order("created_at", desc=True).limit(20).execute()
                 records = response.data
 
                 if not records:
                     return await ctx.send("📭 No historical emails found in the database.")
                 
-                # If there's only 1 email, just send it directly without pagination mechanics
                 if len(records) == 1:
                     embed = self.create_mail_embed(records[0], 0, 1)
-                    await ctx.send(embed=embed)
+                    view = MailLinkButton(record_id=records[0].get("id", "0"))
+                    await ctx.send(content=f"**Subject : {records[0].get('subject')}**", embed=embed, view=view)
                     return
 
             except Exception as e:
                 print(f"❌ Error: {e}")
                 return await ctx.send("⚠️ An error occurred while fetching history.")
 
-        # Pagination logic setup
         current_page = 0
         total_pages = len(records)
         
-        # Send the first (newest) email in the list
         embed = self.create_mail_embed(records[current_page], current_page, total_pages)
-        message = await ctx.send(embed=embed)
+        view = MailLinkButton(record_id=records[current_page].get("id", "0"))
+        message = await ctx.send(content=f"**Subject : {records[current_page].get('subject')}**", embed=embed, view=view)
 
-        # Add control reactions to the message
         await message.add_reaction("◀️")
         await message.add_reaction("▶️")
 
-        # Check function to verify that only the caller can flip pages
         def check(reaction, user):
             return user == ctx.author and str(reaction.emoji) in ["◀️", "▶️"] and reaction.message.id == message.id
 
-        # Loop to handle button interactions for up to 2 minutes
         while True:
             try:
                 reaction, user = await self.bot.wait_for("reaction_add", timeout=120.0, check=check)
 
-                if str(reaction.emoji) == "▶️":
-                    # Go backward in time (higher index = older email)
-                    if current_page < total_pages - 1:
-                        current_page += 1
-                        new_embed = self.create_mail_embed(records[current_page], current_page, total_pages)
-                        await message.edit(embed=new_embed)
-                
-                elif str(reaction.emoji) == "◀️":
-                    # Go forward in time (lower index = newer email)
-                    if current_page > 0:
-                        current_page -= 1
-                        new_embed = self.create_mail_embed(records[current_page], current_page, total_pages)
-                        await message.edit(embed=new_embed)
+                if str(reaction.emoji) == "▶️" and current_page < total_pages - 1:
+                    current_page += 1
+                elif str(reaction.emoji) == "◀️" and current_page > 0:
+                    current_page -= 1
+                else:
+                    await message.remove_reaction(reaction.emoji, user)
+                    continue
 
-                # Remove the user's reaction so they can click it again easily
+                new_embed = self.create_mail_embed(records[current_page], current_page, total_pages)
+                new_view = MailLinkButton(record_id=records[current_page].get("id", "0"))
+                await message.edit(content=f"**Subject : {records[current_page].get('subject')}**", embed=new_embed, view=new_view)
                 await message.remove_reaction(reaction.emoji, user)
 
             except asyncio.TimeoutError:
-                # Clear the reactions once the 2-minute timer expires to clean up the UI
                 try:
                     await message.clear_reactions()
                 except discord.Forbidden:
-                    pass  # Missing permissions to clear reactions
+                    pass
                 break
 
 async def setup(bot):
