@@ -4,3 +4,4 @@ playwright
 dotenv
 motor
 quart
+supabase
