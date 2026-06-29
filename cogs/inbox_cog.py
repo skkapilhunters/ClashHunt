@@ -2,14 +2,16 @@ import os
 import re
 import asyncio
 import discord
-from discord.ext import commands
+from discord.ext import commands, tasks
 from supabase import create_client, Client
+
+# Configure your target Discord Channel ID where new mails should automatically post
+NOTIFY_CHANNEL_ID = 123456789012345678  # 👈 Replace this with your actual Channel ID
 
 class MailLinkButton(discord.ui.View):
     """Adds a dynamic link button below the embed targeting your dashboard."""
     def __init__(self, record_id):
         super().__init__()
-        # Replace this URL with your actual website base path
         dashboard_url = f"https://mail.admin.com/view?id={record_id}"
         self.add_item(discord.ui.Button(
             label="View Complete Mail", 
@@ -21,6 +23,7 @@ class MailLinkButton(discord.ui.View):
 class InboxCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.last_checked_id = None  # Tracks the newest processed mail ID
         
         # Initialize Supabase Client
         supabase_url = os.getenv("SUPABASE_URL")
@@ -31,67 +34,126 @@ class InboxCog(commands.Cog):
             self.supabase: Client = None
         else:
             self.supabase: Client = create_client(supabase_url, supabase_key)
+            
+        # Start the background real-time listener loop
+        self.auto_mail_checker.start()
+
+    def cog_unload(self):
+        self.auto_mail_checker.cancel()
+
+    def parse_sender(self, raw_sender):
+        """Splits raw header formats like '\"Supercell\" <noreply@id.supercell.com>' into Name and Mail cleanly."""
+        if not raw_sender:
+            return "Unknown Sender", "info@mail.admin.com"
+        
+        # Match pattern for "Name" <email@domain.com>
+        match = re.match(r'(?:"?([^"]*)"?\s+)?<([^>]+)>', raw_sender)
+        if match:
+            name = match.group(1) or "Sender's Name"
+            email = match.group(2)
+            return name.strip(), email.strip()
+        
+        # Fallback if it's just a raw email or name without angle brackets
+        if "@" in raw_sender:
+            return "Sender's Name", raw_sender.strip()
+        
+        return raw_sender.strip(), "info@mail.admin.com"
 
     def create_mail_embed(self, record, current_index, total_count):
-        """Builds an optimized, premium layout matching the user template with conditional OTP fields."""
-        sender_name = record.get("sender_name") or "Sender's Name"
-        sender_mail = record.get("sender_mail") or record.get("sender") or "info@mail.admin.com"
+        """Builds an optimized, premium layout matching your template with conditional OTP fields."""
+        raw_sender = record.get("sender") or ""
+        sender_name, sender_mail = self.parse_sender(raw_sender)
+        
         recipient = record.get("recipient") or record.get("to") or "beta@mail.admin.com"
         subject = record.get("subject") or "(No Subject)"
-        
         body = record.get("body_text") or record.get("raw_body") or "No content."
         
-        # 1. Scanning and isolating an OTP code dynamically
-        # Looks for standard 4-8 digit numeric codes inside the text
+        # Scanning and isolating an OTP code dynamically
         otp_match = re.search(r'\b\d{4,8}\b', body) or re.search(r'\b\d{4,8}\b', subject)
         otp_code = otp_match.group(0) if otp_match else None
 
-        # Truncate content body to safeguard Discord payload character limits
         if len(body) > 1000:
             body = body[:997] + "..."
 
-        # 2. Replicating the user's signature visual styles
         embed = discord.Embed(
             title=f"✨ **Todays Mail** : {record.get('created_at', '2026-06-29')[:10]} ✨",
-            color=10052095 # Matching user palette color decimal
+            color=10052095
         )
         
-        # Static asset setup using your custom template icons
         icon_url = "https://media.discordapp.net/attachments/1519257143721590864/1519324369963188346/download.png"
         embed.set_thumbnail(url=icon_url)
 
-        # Structure field lines perfectly
         embed.add_field(name="From", value=sender_name, inline=True)
         embed.add_field(name="Sender Mail", value=sender_mail, inline=True)
         embed.add_field(name="To", value=recipient, inline=False)
         
-        # Conditional Logic: Only append OTP area if an explicit target is matched
+        # Conditional Logic: Only append OTP area if a pattern target is matched
         if otp_code:
             embed.add_field(name="OTP (Tap to Copy)", value=f"`{otp_code}`", inline=False)
 
         embed.add_field(name="Content", value=body, inline=False)
         
-        # Parsing attachment links cleanly
         attachments = record.get("attachments", [])
         if attachments and len(attachments) > 0:
             attach_str = ""
-            for i, att in enumerate(attachments[:2]): # Cap preview text strings to 2
+            for i, att in enumerate(attachments[:2]):
                 emoji = "<:sub_entry_one:1519326682891288666>" if i == 0 else "<:sub_entry_two:1519326714679918632>"
                 url = att.get("url", "https://mail.admin.com")
                 name = att.get("name", f"Attachment {i+1}")
                 attach_str += f"{emoji} **{name}** : **[Click Here ]({url})**\n"
             embed.add_field(name="Attachments :", value=attach_str, inline=False)
 
-        # Track history details inside the footer template
         embed.set_footer(
             text=f"✧ Mail12599 ✧ Email {current_index + 1} of {total_count}",
             icon_url=icon_url
         )
         return embed
 
+    @tasks.loop(seconds=5.0)
+    async def auto_mail_checker(self):
+        """Background worker that checks Supabase every 5 seconds for new emails and prints them automatically."""
+        if not self.supabase or not self.bot.is_ready():
+            return
+
+        try:
+            # Query the single absolute newest entry from the database
+            response = self.supabase.table("inbox").select("*").order("created_at", desc=True).limit(1).execute()
+            if not response.data:
+                return
+
+            latest_record = response.data[0]
+            record_id = latest_record.get("id")
+
+            # Initialization skip: avoids spamming old historical records when the bot first boots up
+            if self.last_checked_id is None:
+                self.last_checked_id = record_id
+                return
+
+            # If the newest database ID is different from our tracker, we received a new mail!
+            if record_id != self.last_checked_id:
+                self.last_checked_id = record_id
+
+                channel = self.bot.get_channel(NOTIFY_CHANNEL_ID)
+                if channel:
+                    embed = self.create_mail_embed(latest_record, 0, 1)
+                    view = MailLinkButton(record_id=record_id)
+                    
+                    # Target ping string can go here (e.g. content="@role")
+                    await channel.send(
+                        content=f"🔔 **New Mail Received**\n**Subject : {latest_record.get('subject', 'No Subject')}**", 
+                        embed=embed, 
+                        view=view
+                    )
+        except Exception as e:
+            print(f"❌ Error in auto mail checker loop: {e}")
+
+    @auto_mail_checker.before_loop
+    async def before_checker(self):
+        await self.bot.wait_until_ready()
+
     @commands.command(name="latest_mail", aliases=["inbox"])
     async def get_latest_mail(self, ctx):
-        """Fetches the absolute newest entry from the Supabase inbox table."""
+        """Fetches the absolute newest entry manually from the Supabase inbox table."""
         if not self.supabase:
             return await ctx.send("❌ Supabase client is not configured properly.")
 
@@ -103,8 +165,6 @@ class InboxCog(commands.Cog):
                 
                 record = response.data[0]
                 embed = self.create_mail_embed(record, 0, 1)
-                
-                # Attach modern Action Row components directly via discord.py
                 view = MailLinkButton(record_id=record.get("id", "0"))
                 
                 await ctx.send(content=f"**Subject : {record.get('subject', 'Test with data')}**", embed=embed, view=view)
