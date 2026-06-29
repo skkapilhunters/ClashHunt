@@ -182,6 +182,7 @@ class WarTracker(commands.Cog):
         return embed, match_id, None
 
     # --- SERVER-AWARE BACKGROUND TASK LOOP (Optimized for 10 Min & DB Persistence) ---
+    # --- SERVER-AWARE BACKGROUND TASK LOOP (Opponent Tag Tracking) ---
     @tasks.loop(minutes=10)
     async def check_clan_war_loop(self):
         await self.bot.wait_until_ready()
@@ -194,30 +195,32 @@ class WarTracker(commands.Cog):
             tag = document["clan_tag"]
             guild_id = document["guild_id"]
             channel_id = document["channel_id"]
-            last_match_id = document.get("last_match_id") # Grab the last match record from database
+            
+            # This now represents the opponent clan tag we saw during the last run
+            last_posted_opponent = document.get("last_match_id") 
             
             channel = self.bot.get_channel(channel_id)
             if not channel: continue
 
             try:
-                embed, match_id, error = await self.generate_war_embed(tag)
+                embed, current_opponent_tag, error = await self.generate_war_embed(tag)
                 
-                # Handling errors or when clan is completely out of war
-                if error or match_id == "notInWar":
-                    if last_match_id != "notInWar":
+                # Handling proxy errors or when clan is out of war entirely
+                if error or current_opponent_tag == "notInWar":
+                    if last_posted_opponent != "notInWar":
                         await self.db_update_last_match(tag, guild_id, "notInWar")
                     continue
 
-                # 🔥 DB INTEGRITY CHECK: If match matches the stored persistent database code, SKIP!
-                if last_match_id == match_id:
+                # 🔥 OPPONENT COMPARISON CHECK: If we already messaged about this enemy tag, SKIP!
+                if last_posted_opponent == current_opponent_tag:
                     continue
 
-                # If it's a completely new match identifier or update, send the alert message
+                # If the opponent tag is completely new or changed (new war match matched)
                 await channel.send(embed=embed)
-                print(f"[Loop Success] Permanent DB match change posted for {tag} on Guild: {guild_id}")
+                print(f"[Loop Success] New opponent detected ({current_opponent_tag}) for {tag}. Saved to MongoDB.")
                 
-                # Instantly save state to database so reboots do not send it again
-                await self.db_update_last_match(tag, guild_id, match_id)
+                # Lock it into the database immediately so reboots or next loops don't repeat the message
+                await self.db_update_last_match(tag, guild_id, current_opponent_tag)
 
             except Exception as e:
                 print(f"[Loop Exception] Tracking error on {tag} for guild {guild_id}: {e}")
