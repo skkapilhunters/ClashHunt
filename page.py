@@ -332,6 +332,60 @@ async def handle_push_submit(token):
         """
         return get_base_html("Execution Failed - ClashHunt", failure_content), 500
 
+# Endpoint to process browser URLs / API endpoints for storage alerts
+@app.route('/post', methods=['GET', 'POST'])
+async def handle_resource_post():
+    try:
+        # Pull parameters safely from the URL string
+        account_name = request.args.get('account_name', 'Unknown')
+        townhall = request.args.get('townhall', 'N/A')
+        total_builders = request.args.get('total_builders', 'N/A')
+        player_gold = request.args.get('player_gold', '0')
+        player_elixir = request.args.get('player_elixir', '0')
+
+        # Locate our loaded resource alert cog
+        resource_cog = bot.get_cog('ResourceAlert')
+        if resource_cog:
+            # Trigger the embed generation function inside the cog
+            success = await resource_cog.send_resource_embed(
+                account_name, townhall, total_builders, player_gold, player_elixir
+            )
+            if success:
+                success_html = """
+                <div class="profile-card" style="border-color: var(--success-color);">
+                    <h1 style="color: var(--success-color); font-size: 3.5rem; margin-bottom: 10px;">✅</h1>
+                    <h1>Alert Dispatched!</h1>
+                    <p style="color: var(--text-muted); margin-top: 15px;">The maximum resource capacity warning card was pushed to Discord successfully.</p>
+                </div>
+                """
+                return get_base_html("Success - ClashHunt", success_html), 200
+            else:
+                fail_html = """
+                <div class="profile-card" style="border-color: var(--danger-color);">
+                    <h1>❌ PUSH FAILED</h1>
+                    <p style="color: var(--text-muted);">The target Discord channel could not be found by the bot.</p>
+                </div>
+                """
+                return get_base_html("Error - ClashHunt", fail_html), 500
+        else:
+            missing_cog_html = """
+            <div class="profile-card" style="border-color: var(--danger-color);">
+                <h1>❌ CONFIGURATION ERROR</h1>
+                <p style="color: var(--text-muted);">The <code>ResourceAlert</code> extension is not active or loaded in the cogs directory.</p>
+            </div>
+            """
+            return get_base_html("Cog Missing - ClashHunt", missing_cog_html), 500
+
+    except Exception as e:
+        print(f"Error handling webhook endpoint: {e}")
+        err_html = f"""
+        <div class="profile-card" style="border-color: var(--danger-color);">
+            <h1>❌ Internal Processing Failure</h1>
+            <p style="color: var(--text-muted); font-family: monospace;">{str(e)}</p>
+        </div>
+        """
+        return get_base_html("Error - ClashHunt", err_html), 500
+
 # Server execution loop initialized dynamically inside main.py
 async def run_web_server():
     port = int(os.environ.get("PORT", 8080))
