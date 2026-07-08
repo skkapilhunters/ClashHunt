@@ -18,7 +18,7 @@ class ResourceAlert(commands.Cog):
         # Structure the description using your custom layout
         embed_description = (
             f"Attention! **{account_name}** has reached maximum resource capacity and needs attention.\n\n"
-            f"### 📊 Account Details:\n"
+            f"### <a:bluestar:1519339839001071666> Account Details:\n"
             f"<a:parrow:1516089889110753383> **Town Hall:** Level {townhall}\n"
             f"<a:rarroww:1516090007914287237> **Available Builders:** {total_builders}\n\n"
             f"### 💰 Current Resources:\n"
@@ -29,7 +29,7 @@ class ResourceAlert(commands.Cog):
 
         # Assemble the Embed
         embed = discord.Embed(
-            title="<a:bluestar:1516089971100876800> Resource Alert: Storage Full!",
+            title="<a:bluestar:1524258545883938887> Resource Alert: Storage Full!",
             description=embed_description,
             color=16766720, # Gold color
             timestamp=datetime.utcnow()
