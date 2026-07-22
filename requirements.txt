@@ -5,3 +5,5 @@ dotenv
 motor
 quart
 supabase
+install
+chromium
