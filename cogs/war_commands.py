@@ -9,21 +9,18 @@ from modules.firebase_exporter import export_war_to_firebase
 class WarCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Initialize Motor client directly if bot.db_collection isn't attached
         mongo_uri = os.getenv("MONGO_URI")
+        self.collection = None
         
         if mongo_uri:
             client = motor.motor_asyncio.AsyncIOMotorClient(mongo_uri)
-            # Try getting default database, fallback to explicit database name if missing in URI
             try:
                 db = client.get_default_database()
             except Exception:
-                db_name = os.getenv("MONGO_DB_NAME", "clash_bot") # Replace 'clash_bot' with your db name
+                db_name = os.getenv("MONGO_DB_NAME", "clash_bot")
                 db = client[db_name]
                 
             self.collection = db["war_conflicts"]
-        else:
-            self.collection = getattr(bot, "db_collection", None)
 
     @commands.command(name="migratewar")
     @commands.has_permissions(administrator=True)
@@ -33,8 +30,8 @@ class WarCommands(commands.Cog):
         pushes them to Firebase Firestore, and wipes them from MongoDB.
         Usage: !migratewar
         """
-        # Resolve collection reference
-        db_collection = self.collection or getattr(self.bot, "db_collection", None)
+        # Resolve collection safely without triggering boolean evaluation
+        db_collection = self.collection if self.collection is not None else getattr(self.bot, "db_collection", None)
 
         if db_collection is None:
             await ctx.send("❌ Could not connect to MongoDB. Check your `MONGO_URI` environment variable.")
