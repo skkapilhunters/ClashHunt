@@ -60,7 +60,7 @@ if __name__ == "__main__":
         print("[Critical Error] DISCORD_BOT_TOKEN is missing from your .env file!")
     else:
         # 1. Trigger the browser dependency installer first
-        # auto_install_playwright()
+        auto_install_playwright()
         
         # 2. Start the bot using your token
         bot.run(DISCORD_BOT_TOKEN)
