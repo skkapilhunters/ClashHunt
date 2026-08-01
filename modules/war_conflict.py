@@ -6,6 +6,9 @@ import os
 # Import your web scraper from modules
 from modules.scraper import scrape_fwa_details
 
+# Import Firebase exporter module
+from modules.firebase_exporter import export_war_to_firebase
+
 BASE_GATEWAY = "https://clash-hunt-api.vercel.app/proxy"
 
 def normalize_tag(tag: str) -> str:
@@ -143,6 +146,7 @@ async def generate_and_store_war_conflict(clan_tag: str, guild_id: int, db_colle
     2. Runs Web Scraper
     3. Formats custom conflict JSON payload
     4. Upserts output into MongoDB
+    5. Migrates record to Firebase if war status is 'War Ended'
     """
     clean_tag = normalize_tag(clan_tag)
     params = {"endpoint": "clans", "tag": clean_tag, "suffix": "currentwar"}
@@ -166,17 +170,24 @@ async def generate_and_store_war_conflict(clan_tag: str, guild_id: int, db_colle
     if conflict_json and fwa_metrics:
         conflict_json["clans"]["clan_a"]["type"] = fwa_metrics.get("match_type", "Official FWA")
 
-    # Upsert directly into MongoDB 'war_conflicts' collection
+    current_status = conflict_json["war_metadata"]["status"]
+
+    # 1. Upsert directly into MongoDB 'war_conflicts' collection
     await db_collection.update_one(
         {"clan_tag": clean_tag, "guild_id": guild_id},
         {"$set": {
             "clan_tag": clean_tag,
             "guild_id": guild_id,
-            "last_status": conflict_json["war_metadata"]["status"],
+            "last_status": current_status,
             "conflict_data": conflict_json
         }},
         upsert=True
     )
 
-    print(f"[WarConflict] Saved conflict payload for {clean_tag} (State: {conflict_json['war_metadata']['status']})")
+    print(f"[WarConflict] Saved conflict payload for {clean_tag} (State: {current_status})")
+
+    # 2. Check and migrate to Firebase Firestore if status is 'War Ended'
+    if current_status == "War Ended":
+        await export_war_to_firebase(clean_tag, guild_id, conflict_json)
+
     return conflict_json, None
