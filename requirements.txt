@@ -6,3 +6,4 @@ motor
 quart
 supabase
 chromium
+firebase_admin
