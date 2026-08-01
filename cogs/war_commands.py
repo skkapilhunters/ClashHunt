@@ -9,11 +9,18 @@ from modules.firebase_exporter import export_war_to_firebase
 class WarCommands(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        # Initialize Motor client here if bot.db_collection isn't set globally
-        mongo_uri = os.getenv("MONGO_URI") # Make sure MONGO_URI is in your .env
+        # Initialize Motor client directly if bot.db_collection isn't attached
+        mongo_uri = os.getenv("MONGO_URI")
+        
         if mongo_uri:
             client = motor.motor_asyncio.AsyncIOMotorClient(mongo_uri)
-            db = client.get_default_database() # Uses database specified in MONGO_URI string
+            # Try getting default database, fallback to explicit database name if missing in URI
+            try:
+                db = client.get_default_database()
+            except Exception:
+                db_name = os.getenv("MONGO_DB_NAME", "clash_bot") # Replace 'clash_bot' with your db name
+                db = client[db_name]
+                
             self.collection = db["war_conflicts"]
         else:
             self.collection = getattr(bot, "db_collection", None)
