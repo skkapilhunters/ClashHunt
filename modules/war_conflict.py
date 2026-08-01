@@ -143,10 +143,9 @@ async def generate_and_store_war_conflict(clan_tag: str, guild_id: int, db_colle
     """
     Main function called by WarTracker:
     1. Fetches live CoC API war data
-    2. Runs Web Scraper
-    3. Formats custom conflict JSON payload
-    4. Upserts output into MongoDB
-    5. Migrates record to Firebase if war status is 'War Ended'
+    2. Runs Web Scraper & builds conflict JSON payload
+    3. IF 'War Ended': Exports to Firebase & DELETES entry from MongoDB
+    4. ELSE (ongoing war): Upserts payload into MongoDB
     """
     clean_tag = normalize_tag(clan_tag)
     params = {"endpoint": "clans", "tag": clean_tag, "suffix": "currentwar"}
@@ -166,13 +165,24 @@ async def generate_and_store_war_conflict(clan_tag: str, guild_id: int, db_colle
     # Build custom JSON structure
     conflict_json = build_war_json(war_data)
 
-    # Inject scraped FWA metrics if available
     if conflict_json and fwa_metrics:
         conflict_json["clans"]["clan_a"]["type"] = fwa_metrics.get("match_type", "Official FWA")
 
     current_status = conflict_json["war_metadata"]["status"]
 
-    # 1. Upsert directly into MongoDB 'war_conflicts' collection
+    # 1. Automatic Migration & Cleanup if War Ended
+    if current_status == "War Ended":
+        # Export to Firebase Firestore
+        migration_success = await export_war_to_firebase(clean_tag, guild_id, conflict_json)
+        
+        # Remove from MongoDB only if Firebase export was successful
+        if migration_success:
+            await db_collection.delete_one({"clan_tag": clean_tag, "guild_id": guild_id})
+            print(f"🧹 [MongoDB Clean] Successfully moved ended war for {clean_tag} to Firebase and removed from MongoDB.")
+        
+        return conflict_json, None
+
+    # 2. Store/Update ongoing war in MongoDB (Preparation Day / Battle Day)
     await db_collection.update_one(
         {"clan_tag": clean_tag, "guild_id": guild_id},
         {"$set": {
@@ -184,10 +194,5 @@ async def generate_and_store_war_conflict(clan_tag: str, guild_id: int, db_colle
         upsert=True
     )
 
-    print(f"[WarConflict] Saved conflict payload for {clean_tag} (State: {current_status})")
-
-    # 2. Check and migrate to Firebase Firestore if status is 'War Ended'
-    if current_status == "War Ended":
-        await export_war_to_firebase(clean_tag, guild_id, conflict_json)
-
+    print(f"[WarConflict] Saved ongoing conflict payload for {clean_tag} in MongoDB (State: {current_status})")
     return conflict_json, None
