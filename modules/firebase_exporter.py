@@ -3,42 +3,61 @@ import json
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# Initialize Firebase using JSON string from environment variables
-firebase_creds_json = os.getenv("FIREBASE_CREDENTIALS")
+# Global Firestore client variable
+db = None
 
-if firebase_creds_json:
+def init_firebase():
+    """Initializes Firebase Admin SDK using environment variables."""
+    global db
+    if firebase_admin._apps:
+        db = firestore.client()
+        return
+
+    firebase_creds_json = os.getenv("FIREBASE_CREDENTIALS")
+
+    if not firebase_creds_json:
+        print("⚠️ [Firebase Warning] FIREBASE_CREDENTIALS is missing from .env/secrets!")
+        return
+
     try:
-        # Parse the JSON string from .env
+        # Parse the JSON string from environment variables
         cred_dict = json.loads(firebase_creds_json)
         
-        # Initialize Firebase if not already initialized
-        if not firebase_admin._apps:
-            cred = credentials.Certificate(cred_dict)
-            firebase_admin.initialize_app(cred)
-            
+        # Handle formatted newlines in private key if passed literally
+        if "private_key" in cred_dict:
+            cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
+
+        cred = credentials.Certificate(cred_dict)
+        firebase_admin.initialize_app(cred)
         db = firestore.client()
-        print("🔥 [Firebase] Successfully initialized using environment variables!")
+        print("🔥 [Firebase] Successfully initialized Firestore client via ENV secrets!")
     except Exception as e:
-        print(f"❌ [Firebase Init Error] Failed to parse credentials: {e}")
-        db = None
-else:
-    print("⚠️ [Firebase Warning] FIREBASE_CREDENTIALS environment variable is missing!")
-    db = None
+        print(f"❌ [Firebase Init Error] Failed to initialize Firebase: {e}")
+
+# Call initialization on module import
+init_firebase()
 
 
 async def export_war_to_firebase(clan_tag: str, guild_id: int, conflict_data: dict) -> bool:
     """
-    Exports ended war documents directly to Firebase Firestore.
+    Archives ended war documents directly to Firebase Firestore.
+    Collection: 'ended_wars'
+    Document ID Format: CLANTAG_YYYY-MM-DD_HH-MM-SS
     """
+    global db
     if not db:
-        print("❌ [Firebase Error] Cannot migrate: Database client is not initialized.")
-        return False
+        # Retry initialization in case env variables loaded late
+        init_firebase()
+        if not db:
+            print("❌ [Firebase Error] Skipping migration: Firestore client not initialized.")
+            return False
 
     try:
+        # Sanitize clan tag for document key (remove '#')
         clean_tag = clan_tag.replace("#", "")
         prep_start = conflict_data.get("war_metadata", {}).get("prep_day_start", "unknown_date")
         
-        # Create a unique, clean document ID (e.g. JPPC80RR_2026-07-28_16-01-11)
+        # Create a clean, unique ID (e.g., JPPC80RR_2026-07-28_16-01-11)
         doc_id = f"{clean_tag}_{prep_start.replace(' ', '_').replace(':', '-')}"
 
         doc_ref = db.collection("ended_wars").document(doc_id)
@@ -50,8 +69,9 @@ async def export_war_to_firebase(clan_tag: str, guild_id: int, conflict_data: di
             "conflict_data": conflict_data
         }
 
+        # Merge ensures existing documents update smoothly without deleting fields
         doc_ref.set(payload, merge=True)
-        print(f"🔥 [Firebase] Successfully migrated ended war data for document ID: {doc_id}")
+        print(f"🔥 [Firebase] Successfully migrated 'War Ended' data for doc: {doc_id}")
         return True
 
     except Exception as e:
