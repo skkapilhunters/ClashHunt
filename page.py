@@ -6,12 +6,26 @@ from quart import Quart, request, render_template_string
 from bot_instance import bot  # Pulling bot instance safely
 from local_logger import save_to_history  # Import your existing db logic
 
+import os
+import json
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# Initialize Firebase (Ensure path to serviceAccountKey.json is correct)
-cred = credentials.Certificate("path/to/serviceAccountKey.json")
-firebase_admin.initialize_app(cred)
+# Retrieve JSON string from environment variables
+firebase_creds_raw = os.environ.get("FIREBASE_CREDENTIALS")
+
+if firebase_creds_raw:
+    # Parse string into dictionary
+    cred_dict = json.loads(firebase_creds_raw)
+    
+    # Firebase private key fix (handles escaped newline characters \n when loaded from ENV)
+    if "private_key" in cred_dict:
+        cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
+        
+    cred = credentials.Certificate(cred_dict)
+    firebase_admin.initialize_app(cred)
+else:
+    print("⚠️ FIREBASE_CREDENTIALS environment variable not set!")
 
 db = firestore.client()
 
