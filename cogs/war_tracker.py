@@ -192,7 +192,8 @@ class WarTracker(commands.Cog):
     async def check_clan_war_loop(self):
         await self.bot.wait_until_ready()
         all_tracked_entries = await self.db_get_all_global_clans()
-        if not all_tracked_entries: return
+        if not all_tracked_entries:
+            return
 
         for document in all_tracked_entries:
             tag = document["clan_tag"]
@@ -207,12 +208,14 @@ class WarTracker(commands.Cog):
             try:
                 # 1. Fetch current war state via API
                 params = {"endpoint": "clans", "tag": tag, "suffix": "currentwar"}
-                async with aiohttp.ClientSession() as session:
-                    async with session.get(BASE_GATEWAY, params=params) as response:
-                        if response.status != 200: continue
-                        war_data = await response.json()
+                async with self.session.get(BASE_GATEWAY, params=params) as response:
+                    if response.status != 200:
+                        continue
+                    war_data = await response.json()
 
                 current_state = war_data.get("state")
+                
+                # Handle Not In War
                 if current_state == "notInWar":
                     if last_recorded_phase != "notInWar":
                         await self.db_update_war_state(tag, guild_id, "notInWar", "notInWar")
@@ -226,26 +229,31 @@ class WarTracker(commands.Cog):
                 }
                 current_phase = state_map.get(current_state, current_state)
 
-                # 🔥 IF A NEW OPPONENT OR PHASE TRANSITION OCCURS:
-                if current_phase != last_recorded_phase or opponent_tag != last_posted_opponent:
-                    print(f"🔄 State change detected for {tag}: [{last_recorded_phase}] -> [{current_phase}]")
+                # Check if a new phase or new opponent occurred
+                is_state_changed = (current_phase != last_recorded_phase) or (opponent_tag != last_posted_opponent)
 
-                    # A. Generate embed and post to Discord channel
+                # 🔥 1. DISCORD EMBED ALERT: Only send when state/opponent changes
+                if is_state_changed:
+                    print(f"🔄 State change detected for {tag}: [{last_recorded_phase}] -> [{current_phase}]")
                     if channel:
                         embed, _, err = await self.generate_war_embed(tag)
                         if embed and not err:
                             await channel.send(embed=embed)
 
-                    # B. Generate & Save complete Conflict JSON to MongoDB
+                # 🔥 2. DATABASE SYNC: Update MongoDB if state changed OR if it's Battle Day
+                if is_state_changed or current_phase == "Battle Day":
+                    print(f"💾 Updating war conflict data in MongoDB for {tag} (Phase: {current_phase})")
+                    
+                    # Generate & Save complete Conflict JSON to MongoDB
                     await generate_and_store_war_conflict(tag, guild_id, self.conflicts_collection)
-
-                    # C. Update tracked state flags in DB
+                    
+                    # Update tracked state flags in DB
                     await self.db_update_war_state(tag, guild_id, current_phase, opponent_tag)
 
             except Exception as e:
                 print(f"[Loop Exception] Tracking error on {tag}: {e}")
             
-            await asyncio.sleep(2)
+            await asyncio.sleep(1.5)
 
     def cog_unload(self):
         self.check_clan_war_loop.cancel()
