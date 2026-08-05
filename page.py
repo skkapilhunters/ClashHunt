@@ -6,6 +6,15 @@ from quart import Quart, request, render_template_string
 from bot_instance import bot  # Pulling bot instance safely
 from local_logger import save_to_history  # Import your existing db logic
 
+import firebase_admin
+from firebase_admin import credentials, firestore
+
+# Initialize Firebase (Ensure path to serviceAccountKey.json is correct)
+cred = credentials.Certificate("path/to/serviceAccountKey.json")
+firebase_admin.initialize_app(cred)
+
+db = firestore.client()
+
 app = Quart(__name__)
 
 # Track when the dashboard script loaded
@@ -194,6 +203,128 @@ def get_base_html(title, content):
     </body>
     </html>
     """
+
+@app.route('/war_conflicts', methods=['GET'])
+async def war_conflicts():
+    # Fetch Document ID directly from URL query parameters (supports both ?docid and ?docid_string)
+    doc_id = request.args.get('docid')
+    if not doc_id and request.args:
+        # Fallback to get the key directly if format is: /war_conflicts?2LRGQ2L9L_2026-08-03_10-38-53
+        doc_id = list(request.args.keys())[0]
+
+    if not doc_id:
+        error_content = """
+        <div class="profile-card" style="border-color: var(--danger-color);">
+            <h1>❌ Missing Document ID</h1>
+            <p style="color: var(--text-muted);">Please provide a document parameter in the URL.</p>
+        </div>
+        """
+        return get_base_html("Error - ClashHunt", error_content), 400
+
+    # Fetch document from Firestore
+    doc_ref = db.collection('ended_wars').document(doc_id)
+    doc = doc_ref.get()
+
+    if not doc.exists:
+        error_content = f"""
+        <div class="profile-card" style="border-color: var(--danger-color);">
+            <h1>❌ War Document Not Found</h1>
+            <p style="color: var(--text-muted);">No war records match ID: <code>{doc_id}</code></p>
+        </div>
+        """
+        return get_base_html("Not Found - ClashHunt", error_content), 404
+
+    data = doc.to_dict()
+    conflict_data = data.get('conflict_data', {})
+    war_meta = conflict_data.get('war_metadata', {})
+    clans = conflict_data.get('clans', {})
+    rosters = conflict_data.get('rosters', [])
+
+    clan_a = clans.get('clan_a', {})
+    clan_b = clans.get('clan_b', {})
+
+    # Build the HTML content for the War View
+    content = f"""
+    <div class="profile-card" style="text-align: left;">
+        <h2>⚔️ Saved Clan War Details</h2>
+        <div style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6;">
+            <b>Prep. Day Start:</b> {war_meta.get('prep_day_start', 'N/A')}<br>
+            <b>Battle Day Start:</b> {war_meta.get('battle_day_start', 'N/A')}<br>
+            <b>War Ends:</b> {war_meta.get('war_ends', 'N/A')}<br>
+            <b>Status:</b> <span style="color: #4fffc0;">{war_meta.get('status', 'N/A')}</span><br>
+            <b>Last Updated:</b> {war_meta.get('last_updated', 'N/A')}
+        </div>
+
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
+            <thead>
+                <tr style="border-bottom: 2px solid rgba(255,255,255,0.1); text-align: left;">
+                    <th style="padding: 10px; color: #e74c3c; width: 48%;">Clan A</th>
+                    <th style="width: 4%;"></th>
+                    <th style="padding: 10px; color: #e74c3c; width: 48%;">Clan B</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                    <td style="padding: 10px; vertical-align: top;">
+                        <b>{clan_a.get('name', 'N/A')}</b> ({clan_a.get('tag', '')})<br>
+                        <span style="color: var(--text-muted);">
+                            Lvl {clan_a.get('level', 0)} | {clan_a.get('members_count', 0)} members<br>
+                            ⭐ {clan_a.get('stars', 0)} | {clan_a.get('destruction_percentage', '0.0%')} | Attacks: {clan_a.get('attacks_used', 0)}
+                        </span>
+                    </td>
+                    <td></td>
+                    <td style="padding: 10px; vertical-align: top;">
+                        <b>{clan_b.get('name', 'N/A')}</b> ({clan_b.get('tag', '')})<br>
+                        <span style="color: var(--text-muted);">
+                            Lvl {clan_b.get('level', 0)} | {clan_b.get('members_count', 0)} members<br>
+                            ⭐ {clan_b.get('stars', 0)} | {clan_b.get('destruction_percentage', '0.0%')} | Attacks: {clan_b.get('attacks_used', 0)}
+                        </span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3 style="margin-top: 25px; color: var(--accent-color);">Roster Comparison</h3>
+        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+            <thead>
+                <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); color: var(--text-muted);">
+                    <th style="padding: 8px; text-align: center;">#</th>
+                    <th style="padding: 8px; text-align: left;">Clan A Member</th>
+                    <th style="padding: 8px; text-align: left;">Clan B Member</th>
+                </tr>
+            </thead>
+            <tbody>
+    """
+
+    for item in rosters:
+        pos = item.get('position', '-')
+        ca = item.get('clan_a_member', {})
+        cb = item.get('clan_b_member', {})
+
+        ca_attacks = "<br>".join([f"Hit #{att.get('defender')}: {att.get('stars')}⭐ {att.get('destruction')}%" for att in ca.get('attacks', [])]) or "No attacks"
+        cb_attacks = "<br>".join([f"Hit #{att.get('defender')}: {att.get('stars')}⭐ {att.get('destruction')}%" for att in cb.get('attacks', [])]) or "No attacks"
+
+        content += f"""
+        <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+            <td style="padding: 8px; text-align: center; color: var(--text-muted);">{pos}</td>
+            <td style="padding: 8px;">
+                <b>{ca.get('name', 'N/A')}</b> <small style="color:var(--text-muted);">{ca.get('tag', '')}</small><br>
+                <small style="color: #4e73df;">{ca_attacks}</small>
+            </td>
+            <td style="padding: 8px;">
+                <b>{cb.get('name', 'N/A')}</b> <small style="color:var(--text-muted);">{cb.get('tag', '')}</small><br>
+                <small style="color: #4e73df;">{cb_attacks}</small>
+            </td>
+        </tr>
+        """
+
+    content += """
+            </tbody>
+        </table>
+    </div>
+    """
+
+    return get_base_html(f"War Details - {doc_id}", content)
 
 @app.route('/')
 async def home():
