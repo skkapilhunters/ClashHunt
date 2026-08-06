@@ -1,35 +1,35 @@
 import os
+import json
 import time
 import uuid
 import math
+
+import firebase_admin
+from firebase_admin import credentials, firestore
 from quart import Quart, request, render_template_string
 from bot_instance import bot  # Pulling bot instance safely
 from local_logger import save_to_history  # Import your existing db logic
 
-import os
-import json
-import firebase_admin
-from firebase_admin import credentials, firestore
+app = Quart(__name__)
 
-# Retrieve JSON string from environment variables
+# Initialize Firebase from Environment Variable
 firebase_creds_raw = os.environ.get("FIREBASE_CREDENTIALS")
 
 if firebase_creds_raw:
-    # Parse string into dictionary
-    cred_dict = json.loads(firebase_creds_raw)
-    
-    # Firebase private key fix (handles escaped newline characters \n when loaded from ENV)
-    if "private_key" in cred_dict:
-        cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
-        
-    cred = credentials.Certificate(cred_dict)
-    firebase_admin.initialize_app(cred)
+    try:
+        cred_dict = json.loads(firebase_creds_raw)
+        # Fix escaped newlines in RSA private keys when loaded from ENV vars
+        if "private_key" in cred_dict:
+            cred_dict["private_key"] = cred_dict["private_key"].replace("\\n", "\n")
+            
+        cred = credentials.Certificate(cred_dict)
+        firebase_admin.initialize_app(cred)
+    except Exception as e:
+        print(f"⚠️ Error parsing FIREBASE_CREDENTIALS: {e}")
 else:
     print("⚠️ FIREBASE_CREDENTIALS environment variable not set!")
 
 db = firestore.client()
-
-app = Quart(__name__)
 
 # Track when the dashboard script loaded
 START_TIME = time.time()
@@ -160,7 +160,6 @@ def get_base_html(title, content):
                 letter-spacing: 1px;
             }}
 
-            /* Push Portal Specific Elements */
             textarea {{
                 width: 100%;
                 height: 350px;
@@ -218,143 +217,18 @@ def get_base_html(title, content):
     </html>
     """
 
-@app.route('/war_conflicts', methods=['GET'])
-async def war_conflicts():
-    # Fetch Document ID directly from URL query parameters (supports both ?docid and ?docid_string)
-    doc_id = request.args.get('docid')
-    if not doc_id and request.args:
-        # Fallback to get the key directly if format is: /war_conflicts?2LRGQ2L9L_2026-08-03_10-38-53
-        doc_id = list(request.args.keys())[0]
-
-    if not doc_id:
-        error_content = """
-        <div class="profile-card" style="border-color: var(--danger-color);">
-            <h1>❌ Missing Document ID</h1>
-            <p style="color: var(--text-muted);">Please provide a document parameter in the URL.</p>
-        </div>
-        """
-        return get_base_html("Error - ClashHunt", error_content), 400
-
-    # Fetch document from Firestore
-    doc_ref = db.collection('ended_wars').document(doc_id)
-    doc = doc_ref.get()
-
-    if not doc.exists:
-        error_content = f"""
-        <div class="profile-card" style="border-color: var(--danger-color);">
-            <h1>❌ War Document Not Found</h1>
-            <p style="color: var(--text-muted);">No war records match ID: <code>{doc_id}</code></p>
-        </div>
-        """
-        return get_base_html("Not Found - ClashHunt", error_content), 404
-
-    data = doc.to_dict()
-    conflict_data = data.get('conflict_data', {})
-    war_meta = conflict_data.get('war_metadata', {})
-    clans = conflict_data.get('clans', {})
-    rosters = conflict_data.get('rosters', [])
-
-    clan_a = clans.get('clan_a', {})
-    clan_b = clans.get('clan_b', {})
-
-    # Build the HTML content for the War View
-    content = f"""
-    <div class="profile-card" style="text-align: left;">
-        <h2>⚔️ Saved Clan War Details</h2>
-        <div style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6;">
-            <b>Prep. Day Start:</b> {war_meta.get('prep_day_start', 'N/A')}<br>
-            <b>Battle Day Start:</b> {war_meta.get('battle_day_start', 'N/A')}<br>
-            <b>War Ends:</b> {war_meta.get('war_ends', 'N/A')}<br>
-            <b>Status:</b> <span style="color: #4fffc0;">{war_meta.get('status', 'N/A')}</span><br>
-            <b>Last Updated:</b> {war_meta.get('last_updated', 'N/A')}
-        </div>
-
-        <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
-            <thead>
-                <tr style="border-bottom: 2px solid rgba(255,255,255,0.1); text-align: left;">
-                    <th style="padding: 10px; color: #e74c3c; width: 48%;">Clan A</th>
-                    <th style="width: 4%;"></th>
-                    <th style="padding: 10px; color: #e74c3c; width: 48%;">Clan B</th>
-                </tr>
-            </thead>
-            <tbody>
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                    <td style="padding: 10px; vertical-align: top;">
-                        <b>{clan_a.get('name', 'N/A')}</b> ({clan_a.get('tag', '')})<br>
-                        <span style="color: var(--text-muted);">
-                            Lvl {clan_a.get('level', 0)} | {clan_a.get('members_count', 0)} members<br>
-                            ⭐ {clan_a.get('stars', 0)} | {clan_a.get('destruction_percentage', '0.0%')} | Attacks: {clan_a.get('attacks_used', 0)}
-                        </span>
-                    </td>
-                    <td></td>
-                    <td style="padding: 10px; vertical-align: top;">
-                        <b>{clan_b.get('name', 'N/A')}</b> ({clan_b.get('tag', '')})<br>
-                        <span style="color: var(--text-muted);">
-                            Lvl {clan_b.get('level', 0)} | {clan_b.get('members_count', 0)} members<br>
-                            ⭐ {clan_b.get('stars', 0)} | {clan_b.get('destruction_percentage', '0.0%')} | Attacks: {clan_b.get('attacks_used', 0)}
-                        </span>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
-
-        <h3 style="margin-top: 25px; color: var(--accent-color);">Roster Comparison</h3>
-        <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
-            <thead>
-                <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); color: var(--text-muted);">
-                    <th style="padding: 8px; text-align: center;">#</th>
-                    <th style="padding: 8px; text-align: left;">Clan A Member</th>
-                    <th style="padding: 8px; text-align: left;">Clan B Member</th>
-                </tr>
-            </thead>
-            <tbody>
-    """
-
-    for item in rosters:
-        pos = item.get('position', '-')
-        ca = item.get('clan_a_member', {})
-        cb = item.get('clan_b_member', {})
-
-        ca_attacks = "<br>".join([f"Hit #{att.get('defender')}: {att.get('stars')}⭐ {att.get('destruction')}%" for att in ca.get('attacks', [])]) or "No attacks"
-        cb_attacks = "<br>".join([f"Hit #{att.get('defender')}: {att.get('stars')}⭐ {att.get('destruction')}%" for att in cb.get('attacks', [])]) or "No attacks"
-
-        content += f"""
-        <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
-            <td style="padding: 8px; text-align: center; color: var(--text-muted);">{pos}</td>
-            <td style="padding: 8px;">
-                <b>{ca.get('name', 'N/A')}</b> <small style="color:var(--text-muted);">{ca.get('tag', '')}</small><br>
-                <small style="color: #4e73df;">{ca_attacks}</small>
-            </td>
-            <td style="padding: 8px;">
-                <b>{cb.get('name', 'N/A')}</b> <small style="color:var(--text-muted);">{cb.get('tag', '')}</small><br>
-                <small style="color: #4e73df;">{cb_attacks}</small>
-            </td>
-        </tr>
-        """
-
-    content += """
-            </tbody>
-        </table>
-    </div>
-    """
-
-    return get_base_html(f"War Details - {doc_id}", content)
-
 @app.route('/')
 async def home():
-    # Gather live statistics from your Discord bot safely
     bot_name = bot.user.name if bot.user else "Clan War Tracker"
     avatar_url = bot.user.avatar.url if bot.user and bot.user.avatar else "https://cdn.discordapp.com/embed/avatars/0.png"
     guild_count = len(bot.guilds)
     total_users = sum(g.member_count for g in bot.guilds) if bot.guilds else 0
     
-    # SAFE LATENCY CHECK (Prevents float NaN crashes)
     if bot.latency and not math.isnan(bot.latency):
         latency = round(bot.latency * 1000)
     else:
         latency = 0   
         
-    # Simple uptime calculation
     uptime_seconds = int(time.time() - START_TIME)
     uptime_hours = uptime_seconds // 3600
     uptime_mins = (uptime_seconds % 3600) // 60
@@ -392,7 +266,154 @@ async def home():
     """
     return get_base_html(f"{bot_name} - Dashboard", homepage_content)
 
-# GET Route: Displays the Unlimited Submission Text Portal
+
+@app.route('/war_conflicts', methods=['GET'])
+async def war_conflicts():
+    # Supports both /war_conflicts?docid=ID and /war_conflicts?2LRGQ2L9L_2026-08-03_10-38-53
+    doc_id = request.args.get('docid')
+    if not doc_id and request.args:
+        doc_id = list(request.args.keys())[0]
+
+    if not doc_id:
+        error_content = """
+        <div class="profile-card" style="border-color: var(--danger-color);">
+            <h1>❌ Missing Document ID</h1>
+            <p style="color: var(--text-muted);">Please provide a document parameter in the URL query string.</p>
+        </div>
+        """
+        return get_base_html("Error - ClashHunt", error_content), 400
+
+    try:
+        # Fetch document from Firestore "ended_wars" collection
+        doc_ref = db.collection('ended_wars').document(doc_id)
+        doc = doc_ref.get()
+
+        if not doc.exists:
+            error_content = f"""
+            <div class="profile-card" style="border-color: var(--danger-color);">
+                <h1>❌ War Document Not Found</h1>
+                <p style="color: var(--text-muted);">No war records match ID: <code>{doc_id}</code></p>
+            </div>
+            """
+            return get_base_html("Not Found - ClashHunt", error_content), 404
+
+        data = doc.to_dict()
+        conflict_data = data.get('conflict_data', {})
+        war_meta = conflict_data.get('war_metadata', {})
+        clans = conflict_data.get('clans', {})
+        rosters = conflict_data.get('rosters', [])
+
+        clan_a = clans.get('clan_a', {})
+        clan_b = clans.get('clan_b', {})
+
+        # Helper function to prevent string AttributeError on attack formatting
+        def format_attacks(attacks_list):
+            if not attacks_list or not isinstance(attacks_list, list):
+                return "No attacks"
+            
+            formatted = []
+            for att in attacks_list:
+                if isinstance(att, dict):
+                    defender = att.get('defender', '?')
+                    stars = att.get('stars', 0)
+                    destruction = att.get('destruction', 0)
+                    formatted.append(f"Hit #{defender}: {stars}⭐ {destruction}%")
+                elif isinstance(att, str):
+                    formatted.append(att)
+                    
+            return "<br>".join(formatted) if formatted else "No attacks"
+
+        # Build table rows safely
+        roster_rows = ""
+        for item in rosters:
+            pos = item.get('position', '-')
+            ca = item.get('clan_a_member', {})
+            cb = item.get('clan_b_member', {})
+
+            ca_attacks = format_attacks(ca.get('attacks'))
+            cb_attacks = format_attacks(cb.get('attacks'))
+
+            roster_rows += f"""
+            <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
+                <td style="padding: 10px; text-align: center; color: var(--text-muted);">{pos}</td>
+                <td style="padding: 10px;">
+                    <b>{ca.get('name', 'N/A')}</b> <small style="color:var(--text-muted);">{ca.get('tag', '')}</small><br>
+                    <small style="color: #4e73df;">{ca_attacks}</small>
+                </td>
+                <td style="padding: 10px;">
+                    <b>{cb.get('name', 'N/A')}</b> <small style="color:var(--text-muted);">{cb.get('tag', '')}</small><br>
+                    <small style="color: #4e73df;">{cb_attacks}</small>
+                </td>
+            </tr>
+            """
+
+        content = f"""
+        <div class="profile-card" style="text-align: left;">
+            <h2>⚔️ Saved Clan War Details</h2>
+            <div style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6;">
+                <b>Prep. Day Start:</b> {war_meta.get('prep_day_start', 'N/A')}<br>
+                <b>Battle Day Start:</b> {war_meta.get('battle_day_start', 'N/A')}<br>
+                <b>War Ends:</b> {war_meta.get('war_ends', 'N/A')}<br>
+                <b>Status:</b> <span style="color: #4fffc0;">{war_meta.get('status', 'N/A')}</span><br>
+                <b>Last Updated:</b> {war_meta.get('last_updated', 'N/A')}
+            </div>
+
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
+                <thead>
+                    <tr style="border-bottom: 2px solid rgba(255,255,255,0.1); text-align: left;">
+                        <th style="padding: 10px; color: #e74c3c; width: 48%;">Clan A</th>
+                        <th style="width: 4%;"></th>
+                        <th style="padding: 10px; color: #e74c3c; width: 48%;">Clan B</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+                        <td style="padding: 10px; vertical-align: top;">
+                            <b>{clan_a.get('name', 'N/A')}</b> ({clan_a.get('tag', '')})<br>
+                            <span style="color: var(--text-muted);">
+                                Lvl {clan_a.get('level', 0)} | {clan_a.get('members_count', 0)} members<br>
+                                ⭐ {clan_a.get('stars', 0)} | {clan_a.get('destruction_percentage', '0.0%')} | Attacks: {clan_a.get('attacks_used', 0)}
+                            </span>
+                        </td>
+                        <td></td>
+                        <td style="padding: 10px; vertical-align: top;">
+                            <b>{clan_b.get('name', 'N/A')}</b> ({clan_b.get('tag', '')})<br>
+                            <span style="color: var(--text-muted);">
+                                Lvl {clan_b.get('level', 0)} | {clan_b.get('members_count', 0)} members<br>
+                                ⭐ {clan_b.get('stars', 0)} | {clan_b.get('destruction_percentage', '0.0%')} | Attacks: {clan_b.get('attacks_used', 0)}
+                            </span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <h3 style="margin-top: 25px; color: var(--accent-color);">Roster Comparison</h3>
+            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                <thead>
+                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); color: var(--text-muted);">
+                        <th style="padding: 8px; text-align: center;">#</th>
+                        <th style="padding: 8px; text-align: left;">Clan A Member</th>
+                        <th style="padding: 8px; text-align: left;">Clan B Member</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {roster_rows}
+                </tbody>
+            </table>
+        </div>
+        """
+        return get_base_html(f"War Details - {doc_id}", content)
+
+    except Exception as e:
+        error_content = f"""
+        <div class="profile-card" style="border-color: var(--danger-color);">
+            <h1 style="color: var(--danger-color);">❌ Internal Fetch Failure</h1>
+            <p style="color: var(--text-muted); font-family: monospace;">{str(e)}</p>
+        </div>
+        """
+        return get_base_html("Error - ClashHunt", error_content), 500
+
+
 @app.route('/push/<token>', methods=['GET'])
 async def view_push_page(token):
     if token not in ACTIVE_TOKENS:
@@ -409,20 +430,17 @@ async def view_push_page(token):
     <div class="profile-card" style="text-align: left;">
         <h2>🌐 ClashHunt Data Submission Portal</h2>
         <p style="color: var(--text-muted); font-size: 0.95rem; margin-bottom: 25px; line-height: 1.5;">
-            Paste your raw JSON data string inside the entry window below. Because this submission runs over direct HTTP streams, there are absolutely <b>no size or character limitations</b>.
+            Paste your raw JSON data string inside the entry window below.
         </p>
         <form method="POST">
             <textarea name="json_data" placeholder="Paste your raw JSON content here..." required></textarea>
-            <button type="submit">🚀 Sync data to MongoDB Database</button>
+            <button type="submit">🚀 Sync data to Database</button>
         </form>
-        <p style="color: var(--text-muted); font-size: 0.8rem; text-align: center; margin-top: 15px; margin-bottom: 0;">
-            ⚠️ This secure link will destroy itself automatically immediately upon submission or after 10 minutes.
-        </p>
     </div>
     """
     return get_base_html("Submit Data - ClashHunt", portal_content)
 
-# POST Route: Processes the massive JSON data string
+
 @app.route('/push/<token>', methods=['POST'])
 async def handle_push_submit(token):
     if token not in ACTIVE_TOKENS:
@@ -435,8 +453,6 @@ async def handle_push_submit(token):
     
     form = await request.form
     raw_data = form.get("json_data", "").strip()
-    
-    # Extract channel reference info before revoking the token access
     ctx_info = ACTIVE_TOKENS.pop(token) 
     
     if not raw_data:
@@ -449,21 +465,18 @@ async def handle_push_submit(token):
         return get_base_html("Failed - ClashHunt", error_content), 400
 
     try:
-        # Fire off your local_logger parsing loop
         save_to_history(raw_data)
         
-        # Ping the originating discord channel asynchronously to announce success
         channel = bot.get_channel(ctx_info["channel_id"])
         if channel:
             bot.loop.create_task(
-                channel.send(f"✅ **Web Sync Complete:** Giant raw data string submitted by <@{ctx_info['author_id']}> processed successfully and synced to MongoDB!")
+                channel.send(f"✅ **Web Sync Complete:** Raw data submitted by <@{ctx_info['author_id']}> processed successfully!")
             )
 
         success_content = """
         <div class="profile-card" style="border-color: var(--success-color);">
             <h1 style="color: var(--success-color); font-size: 3.5rem; margin-bottom: 10px;">✅</h1>
             <h1>Data Synchronized!</h1>
-            <p style="color: var(--text-muted); margin-top: 15px;">Your local configurations and MongoDB cluster were successfully updated. You can now close this browser tab.</p>
         </div>
         """
         return get_base_html("Success - ClashHunt", success_content)
@@ -472,26 +485,23 @@ async def handle_push_submit(token):
         failure_content = f"""
         <div class="profile-card" style="border-color: var(--danger-color);">
             <h1 style="color: var(--danger-color);">❌ Database Synced Error</h1>
-            <p style="color: var(--text-muted); font-family: monospace; font-size: 0.9rem; background: #121420; padding: 15px; border-radius: 6px; text-align: left; overflow-x: auto;">{str(e)}</p>
+            <p style="color: var(--text-muted); font-family: monospace;">{str(e)}</p>
         </div>
         """
         return get_base_html("Execution Failed - ClashHunt", failure_content), 500
 
-# Endpoint to process browser URLs / API endpoints for storage alerts
+
 @app.route('/post', methods=['GET', 'POST'])
 async def handle_resource_post():
     try:
-        # Pull parameters safely from the URL string
         account_name = request.args.get('account_name', 'Unknown')
         townhall = request.args.get('townhall', 'N/A')
         total_builders = request.args.get('total_builders', 'N/A')
         player_gold = request.args.get('player_gold', '0')
         player_elixir = request.args.get('player_elixir', '0')
 
-        # Locate our loaded resource alert cog
         resource_cog = bot.get_cog('ResourceAlert')
         if resource_cog:
-            # Trigger the embed generation function inside the cog
             success = await resource_cog.send_resource_embed(
                 account_name, townhall, total_builders, player_gold, player_elixir
             )
@@ -500,29 +510,18 @@ async def handle_resource_post():
                 <div class="profile-card" style="border-color: var(--success-color);">
                     <h1 style="color: var(--success-color); font-size: 3.5rem; margin-bottom: 10px;">✅</h1>
                     <h1>Alert Dispatched!</h1>
-                    <p style="color: var(--text-muted); margin-top: 15px;">The maximum resource capacity warning card was pushed to Discord successfully.</p>
                 </div>
                 """
                 return get_base_html("Success - ClashHunt", success_html), 200
-            else:
-                fail_html = """
-                <div class="profile-card" style="border-color: var(--danger-color);">
-                    <h1>❌ PUSH FAILED</h1>
-                    <p style="color: var(--text-muted);">The target Discord channel could not be found by the bot.</p>
-                </div>
-                """
-                return get_base_html("Error - ClashHunt", fail_html), 500
-        else:
-            missing_cog_html = """
-            <div class="profile-card" style="border-color: var(--danger-color);">
-                <h1>❌ CONFIGURATION ERROR</h1>
-                <p style="color: var(--text-muted);">The <code>ResourceAlert</code> extension is not active or loaded in the cogs directory.</p>
-            </div>
-            """
-            return get_base_html("Cog Missing - ClashHunt", missing_cog_html), 500
+
+        fail_html = """
+        <div class="profile-card" style="border-color: var(--danger-color);">
+            <h1>❌ PUSH FAILED</h1>
+        </div>
+        """
+        return get_base_html("Error - ClashHunt", fail_html), 500
 
     except Exception as e:
-        print(f"Error handling webhook endpoint: {e}")
         err_html = f"""
         <div class="profile-card" style="border-color: var(--danger-color);">
             <h1>❌ Internal Processing Failure</h1>
@@ -531,7 +530,7 @@ async def handle_resource_post():
         """
         return get_base_html("Error - ClashHunt", err_html), 500
 
-# Server execution loop initialized dynamically inside main.py
+
 async def run_web_server():
     port = int(os.environ.get("PORT", 8080))
     await app.run_task(host="0.0.0.0", port=port)
