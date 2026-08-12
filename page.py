@@ -274,29 +274,8 @@ async def war_conflicts():
     if not doc_id and request.args:
         doc_id = list(request.args.keys())[0]
 
-    # Shared CSS based on your template
-    style_block = """
-    <style>
-        body { font-family: "Times New Roman", Times, serif; font-size: 16px; }
-        #container { width: 75%; margin: 20px auto; border: 1px solid black; text-align: center; padding: 10px; }
-        #title { font-weight: bold; font-size: 32px; cursor: pointer; }
-        #top { display: block; text-align: left; font-size: 16px; margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; }
-        td { width: inherit; border-bottom: 1px solid gray; font-size: 16px; text-align: left; padding: 4px; }
-        td.lb { border-left: 1px solid gray; }
-        a { text-decoration: none; color: blue; }
-        a:visited { color: blue; }
-    </style>
-    """
-
     if not doc_id:
-        error_content = style_block + """
-        <div id="container">
-            <span id="title">❌ Missing Document ID</span><br><br>
-            <span id="top">Please provide a document parameter in the URL query string.</span>
-        </div>
-        """
-        return get_base_html("Error - ClashHunt", error_content), 400
+        return "Missing Document ID: Please provide a document parameter in the URL query string.", 400
 
     try:
         # Fetch document from Firestore "ended_wars" collection
@@ -304,13 +283,7 @@ async def war_conflicts():
         doc = doc_ref.get()
 
         if not doc.exists:
-            error_content = style_block + f"""
-            <div id="container">
-                <span id="title">❌ War Document Not Found</span><br><br>
-                <span id="top">No war records match ID: <b>{doc_id}</b></span>
-            </div>
-            """
-            return get_base_html("Not Found - ClashHunt", error_content), 404
+            return f"War Document Not Found: No war records match ID {doc_id}", 404
 
         data = doc.to_dict()
         conflict_data = data.get('conflict_data', {})
@@ -353,56 +326,130 @@ async def war_conflicts():
             cb_name = cb.get('name', 'N/A')
             cb_tag = cb.get('tag', '')
 
-            roster_rows += f"<tr><td>{pos}</td><td>{ca_name} ({ca_tag})</td><td>{ca_attacks}</td><td class='lb'>{pos}</td><td>{cb_name} ({cb_tag})</td><td>{cb_attacks}</td></tr>\n"
+            roster_rows += f"""<tr>
+                <td>{pos}</td>
+                <td>{ca_name} (<a href="#">{ca_tag}</a>)</td>
+                <td>{ca_attacks}</td>
+                <td class='lb'>{pos}</td>
+                <td>{cb_name} (<a href="#">{cb_tag}</a>)</td>
+                <td>{cb_attacks}</td>
+            </tr>\n"""
 
-        content = style_block + f"""
-        <div id="container">
-            <span id="title">Viewing War</span><br><br>
-            <span id="top">
-                <b>Prep. Day Start: </b>{war_meta.get('prep_day_start', 'N/A')}<br>
-                <b>Battle Day Start: </b>{war_meta.get('battle_day_start', 'N/A')}<br>
-                <b>War Ends: </b>{war_meta.get('war_ends', 'N/A')}<br><br>
-                <b>Status: </b>{war_meta.get('status', 'N/A')}<br>
-                <b>Last Updated: </b>{war_meta.get('last_updated', 'N/A')}<br>
-                <br>
-            </span>
-            
-            <table>
-                <tbody>
-                    <tr>
-                        <td style="width:2%">&nbsp;</td>
-                        <td colspan="2" style="width:48%"><span style="color:red;"><b>Clan A</b></span></td>
-                        <td style="width:2%">&nbsp;</td>
-                        <td colspan="2" style="width:48%"><span style="color:red;"><b>Clan B</b></span></td>
-                    </tr>
-                    <tr>
-                        <td style="width:2%">&nbsp;</td>
-                        <td colspan="2">
-                            {clan_a.get('name', 'N/A')} ({clan_a.get('tag', '')}) lvl. {clan_a.get('level', 0)}<br>
-                            {clan_a.get('members_count', 0)} people, {clan_a.get('stars', 0)}★ {clan_a.get('destruction_percentage', '0.0%')} {clan_a.get('attacks_used', 0)} Attacks
-                        </td>
-                        <td style="width:2%" class="lb">&nbsp;</td>
-                        <td colspan="2">
-                            {clan_b.get('name', 'N/A')} ({clan_b.get('tag', '')}) lvl. {clan_b.get('level', 0)}<br>
-                            {clan_b.get('members_count', 0)} people, {clan_b.get('stars', 0)}★ {clan_b.get('destruction_percentage', '0.0%')} {clan_b.get('attacks_used', 0)} Attacks
-                        </td>
-                    </tr>
-                    <tr></tr>
-                    {roster_rows}
-                </tbody>
-            </table>
-        </div>
-        """
-        return get_base_html(f"War Details - {doc_id}", content)
+        # Bypassing get_base_html to guarantee the pure white layout without CSS bleed
+        full_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Chocolate Clash: Viewing War</title>
+    <style>
+        body {{
+            font-family: "Times New Roman", Times, serif;
+            font-size: 16px;
+            background-color: #ffffff;
+            color: #000000;
+            margin: 0;
+            padding: 20px;
+        }}
+        #container {{
+            width: 75%;
+            margin: 20px auto;
+            border: 1px solid black;
+            text-align: center;
+            padding: 10px;
+            background-color: #ffffff;
+        }}
+        #title {{
+            font-weight: bold;
+            font-size: 32px;
+            cursor: pointer;
+            color: #000000;
+        }}
+        #top {{
+            display: block;
+            text-align: left;
+            font-size: 16px;
+        }}
+        table {{
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }}
+        td {{
+            width: inherit;
+            border-bottom: 1px solid gray;
+            font-size: 16px;
+            text-align: left;
+            padding: 4px;
+            vertical-align: top;
+            color: #000000;
+        }}
+        td.lb {{
+            border-left: 1px solid gray;
+        }}
+        a {{
+            text-decoration: none;
+            color: blue;
+        }}
+        a:visited {{
+            color: blue;
+        }}
+        #credits {{
+            text-align: center;
+            font-size: 16px;
+            margin-top: 20px;
+            color: #000000;
+        }}
+    </style>
+</head>
+<body>
+    <div id="container">
+        <span id="title">FWA ChocolateClash</span>
+        <br><br>
+        <span id="top">
+            Showing details for a saved clan war. (<a href="#">Show flags & NIC</a>)<br><br>
+            <b>Prep. Day Start: </b>{war_meta.get('prep_day_start', 'N/A')}<br>
+            <b>Battle Day Start: </b>{war_meta.get('battle_day_start', 'N/A')}<br>
+            <b>War Ends: </b>{war_meta.get('war_ends', 'N/A')}<br><br>
+            <b>Status: </b>{war_meta.get('status', 'N/A')}<br>
+            <b>Last Updated: </b>{war_meta.get('last_updated', 'N/A')}<br>
+            <br>
+        </span>
+        <table>
+            <tbody>
+                <tr>
+                    <td style="width:2%">&nbsp;</td>
+                    <td colspan="2" style="width:48%"><span style="color:red;"><b>Clan A</b></span></td>
+                    <td style="width:2%">&nbsp;</td>
+                    <td colspan="2" style="width:48%"><span style="color:red;"><b>Clan B</b></span></td>
+                </tr>
+                <tr>
+                    <td style="width:2%">&nbsp;</td>
+                    <td colspan="2">
+                        {clan_a.get('name', 'N/A')} (<a href="#">{clan_a.get('tag', '')}</a>) lvl. {clan_a.get('level', 0)}<br>
+                        {clan_a.get('members_count', 0)} people, {clan_a.get('stars', 0)}★ {clan_a.get('destruction_percentage', '0.0%')} {clan_a.get('attacks_used', 0)} Attacks
+                    </td>
+                    <td style="width:2%" class="lb">&nbsp;</td>
+                    <td colspan="2">
+                        {clan_b.get('name', 'N/A')} (<a href="#">{clan_b.get('tag', '')}</a>) lvl. {clan_b.get('level', 0)}<br>
+                        {clan_b.get('members_count', 0)} people, {clan_b.get('stars', 0)}★ {clan_b.get('destruction_percentage', '0.0%')} {clan_b.get('attacks_used', 0)} Attacks
+                    </td>
+                </tr>
+                <tr></tr>
+                {roster_rows}
+            </tbody>
+        </table>
+    </div>
+    <div id="credits">
+        Maintained by Justin <br>
+        <a href="#">Support</a> - <a href="#">ToS</a> - <a href="#">Old</a> - <a href="#">Home</a> - <a href="#">Split</a>
+    </div>
+</body>
+</html>"""
+        
+        # Return full HTML directly with a 200 OK status
+        return full_html, 200
 
     except Exception as e:
-        error_content = style_block + f"""
-        <div id="container">
-            <span id="title">❌ Internal Fetch Failure</span><br><br>
-            <span id="top">{str(e)}</span>
-        </div>
-        """
-        return get_base_html("Error - ClashHunt", error_content), 500
+        return f"Internal Fetch Failure: {str(e)}", 500
 
 @app.route('/push/<token>', methods=['GET'])
 async def view_push_page(token):
