@@ -416,9 +416,11 @@ async def war_conflicts():
         <table>
             <tbody>
                 <tr>
-                    <td style="width:2%">&nbsp;</td>
+                    # <td style="width:2%">&nbsp;</td>
+                    <td><img style="width: 50px; height: 50px;" src="https://api-assets.clashofclans.com/badges/512/iZ72bTHH7Kj30_CYE1zSt2YSsY_uzbZTq886n4nokM4.png" alt="Clash of Clans Badge"> </td>
                     <td colspan="2" style="width:48%"><span style="color:red;"><b>Clan A</b></span></td>
-                    <td style="width:2%">&nbsp;</td>
+                    <td><img style="width: 50px; height: 50px;" src="{clan_b.get('badge')}" alt="Clash of Clans Badge"></td>
+                    # <td style="width:2%">&nbsp;</td>
                     <td colspan="2" style="width:48%"><span style="color:red;"><b>Clan B</b></span></td>
                 </tr>
                 <tr>
