@@ -274,11 +274,26 @@ async def war_conflicts():
     if not doc_id and request.args:
         doc_id = list(request.args.keys())[0]
 
+    # Shared CSS based on your template
+    style_block = """
+    <style>
+        body { font-family: "Times New Roman", Times, serif; font-size: 16px; }
+        #container { width: 75%; margin: 20px auto; border: 1px solid black; text-align: center; padding: 10px; }
+        #title { font-weight: bold; font-size: 32px; cursor: pointer; }
+        #top { display: block; text-align: left; font-size: 16px; margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; }
+        td { width: inherit; border-bottom: 1px solid gray; font-size: 16px; text-align: left; padding: 4px; }
+        td.lb { border-left: 1px solid gray; }
+        a { text-decoration: none; color: blue; }
+        a:visited { color: blue; }
+    </style>
+    """
+
     if not doc_id:
-        error_content = """
-        <div class="profile-card" style="border-color: var(--danger-color);">
-            <h1>❌ Missing Document ID</h1>
-            <p style="color: var(--text-muted);">Please provide a document parameter in the URL query string.</p>
+        error_content = style_block + """
+        <div id="container">
+            <span id="title">❌ Missing Document ID</span><br><br>
+            <span id="top">Please provide a document parameter in the URL query string.</span>
         </div>
         """
         return get_base_html("Error - ClashHunt", error_content), 400
@@ -289,10 +304,10 @@ async def war_conflicts():
         doc = doc_ref.get()
 
         if not doc.exists:
-            error_content = f"""
-            <div class="profile-card" style="border-color: var(--danger-color);">
-                <h1>❌ War Document Not Found</h1>
-                <p style="color: var(--text-muted);">No war records match ID: <code>{doc_id}</code></p>
+            error_content = style_block + f"""
+            <div id="container">
+                <span id="title">❌ War Document Not Found</span><br><br>
+                <span id="top">No war records match ID: <b>{doc_id}</b></span>
             </div>
             """
             return get_base_html("Not Found - ClashHunt", error_content), 404
@@ -306,24 +321,24 @@ async def war_conflicts():
         clan_a = clans.get('clan_a', {})
         clan_b = clans.get('clan_b', {})
 
-        # Helper function to prevent string AttributeError on attack formatting
+        # Helper function to match the old attack formatting (e.g. "1. Hit #5: 3 stars 100")
         def format_attacks(attacks_list):
             if not attacks_list or not isinstance(attacks_list, list):
                 return "No attacks"
             
             formatted = []
-            for att in attacks_list:
+            for i, att in enumerate(attacks_list, 1):
                 if isinstance(att, dict):
                     defender = att.get('defender', '?')
                     stars = att.get('stars', 0)
                     destruction = att.get('destruction', 0)
-                    formatted.append(f"Hit #{defender}: {stars}⭐ {destruction}%")
+                    formatted.append(f"{i}. Hit #{defender}: {stars} stars {destruction}")
                 elif isinstance(att, str):
-                    formatted.append(att)
+                    formatted.append(f"{i}. {att}")
                     
             return "<br>".join(formatted) if formatted else "No attacks"
 
-        # Build table rows safely
+        # Build table rows matching the 6-column format
         roster_rows = ""
         for item in rosters:
             pos = item.get('position', '-')
@@ -332,71 +347,47 @@ async def war_conflicts():
 
             ca_attacks = format_attacks(ca.get('attacks'))
             cb_attacks = format_attacks(cb.get('attacks'))
+            
+            ca_name = ca.get('name', 'N/A')
+            ca_tag = ca.get('tag', '')
+            cb_name = cb.get('name', 'N/A')
+            cb_tag = cb.get('tag', '')
 
-            roster_rows += f"""
-            <tr style="border-bottom: 1px solid rgba(255,255,255,0.03);">
-                <td style="padding: 10px; text-align: center; color: var(--text-muted);">{pos}</td>
-                <td style="padding: 10px;">
-                    <b>{ca.get('name', 'N/A')}</b> <small style="color:var(--text-muted);">{ca.get('tag', '')}</small><br>
-                    <small style="color: #4e73df;">{ca_attacks}</small>
-                </td>
-                <td style="padding: 10px;">
-                    <b>{cb.get('name', 'N/A')}</b> <small style="color:var(--text-muted);">{cb.get('tag', '')}</small><br>
-                    <small style="color: #4e73df;">{cb_attacks}</small>
-                </td>
-            </tr>
-            """
+            roster_rows += f"<tr><td>{pos}</td><td>{ca_name} ({ca_tag})</td><td>{ca_attacks}</td><td class='lb'>{pos}</td><td>{cb_name} ({cb_tag})</td><td>{cb_attacks}</td></tr>\n"
 
-        content = f"""
-        <div class="profile-card" style="text-align: left;">
-            <h2>⚔️ Saved Clan War Details</h2>
-            <div style="font-size: 0.95rem; color: var(--text-muted); margin-bottom: 20px; line-height: 1.6;">
-                <b>Prep. Day Start:</b> {war_meta.get('prep_day_start', 'N/A')}<br>
-                <b>Battle Day Start:</b> {war_meta.get('battle_day_start', 'N/A')}<br>
-                <b>War Ends:</b> {war_meta.get('war_ends', 'N/A')}<br>
-                <b>Status:</b> <span style="color: #4fffc0;">{war_meta.get('status', 'N/A')}</span><br>
-                <b>Last Updated:</b> {war_meta.get('last_updated', 'N/A')}
-            </div>
-
-            <table style="width: 100%; border-collapse: collapse; font-size: 0.95rem;">
-                <thead>
-                    <tr style="border-bottom: 2px solid rgba(255,255,255,0.1); text-align: left;">
-                        <th style="padding: 10px; color: #e74c3c; width: 48%;">Clan A</th>
-                        <th style="width: 4%;"></th>
-                        <th style="padding: 10px; color: #e74c3c; width: 48%;">Clan B</th>
-                    </tr>
-                </thead>
+        content = style_block + f"""
+        <div id="container">
+            <span id="title">Viewing War</span><br><br>
+            <span id="top">
+                <b>Prep. Day Start: </b>{war_meta.get('prep_day_start', 'N/A')}<br>
+                <b>Battle Day Start: </b>{war_meta.get('battle_day_start', 'N/A')}<br>
+                <b>War Ends: </b>{war_meta.get('war_ends', 'N/A')}<br><br>
+                <b>Status: </b>{war_meta.get('status', 'N/A')}<br>
+                <b>Last Updated: </b>{war_meta.get('last_updated', 'N/A')}<br>
+                <br>
+            </span>
+            
+            <table>
                 <tbody>
-                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.05);">
-                        <td style="padding: 10px; vertical-align: top;">
-                            <b>{clan_a.get('name', 'N/A')}</b> ({clan_a.get('tag', '')})<br>
-                            <span style="color: var(--text-muted);">
-                                Lvl {clan_a.get('level', 0)} | {clan_a.get('members_count', 0)} members<br>
-                                ⭐ {clan_a.get('stars', 0)} | {clan_a.get('destruction_percentage', '0.0%')} | Attacks: {clan_a.get('attacks_used', 0)}
-                            </span>
+                    <tr>
+                        <td style="width:2%">&nbsp;</td>
+                        <td colspan="2" style="width:48%"><span style="color:red;"><b>Clan A</b></span></td>
+                        <td style="width:2%">&nbsp;</td>
+                        <td colspan="2" style="width:48%"><span style="color:red;"><b>Clan B</b></span></td>
+                    </tr>
+                    <tr>
+                        <td style="width:2%">&nbsp;</td>
+                        <td colspan="2">
+                            {clan_a.get('name', 'N/A')} ({clan_a.get('tag', '')}) lvl. {clan_a.get('level', 0)}<br>
+                            {clan_a.get('members_count', 0)} people, {clan_a.get('stars', 0)}★ {clan_a.get('destruction_percentage', '0.0%')} {clan_a.get('attacks_used', 0)} Attacks
                         </td>
-                        <td></td>
-                        <td style="padding: 10px; vertical-align: top;">
-                            <b>{clan_b.get('name', 'N/A')}</b> ({clan_b.get('tag', '')})<br>
-                            <span style="color: var(--text-muted);">
-                                Lvl {clan_b.get('level', 0)} | {clan_b.get('members_count', 0)} members<br>
-                                ⭐ {clan_b.get('stars', 0)} | {clan_b.get('destruction_percentage', '0.0%')} | Attacks: {clan_b.get('attacks_used', 0)}
-                            </span>
+                        <td style="width:2%" class="lb">&nbsp;</td>
+                        <td colspan="2">
+                            {clan_b.get('name', 'N/A')} ({clan_b.get('tag', '')}) lvl. {clan_b.get('level', 0)}<br>
+                            {clan_b.get('members_count', 0)} people, {clan_b.get('stars', 0)}★ {clan_b.get('destruction_percentage', '0.0%')} {clan_b.get('attacks_used', 0)} Attacks
                         </td>
                     </tr>
-                </tbody>
-            </table>
-
-            <h3 style="margin-top: 25px; color: var(--accent-color);">Roster Comparison</h3>
-            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
-                <thead>
-                    <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); color: var(--text-muted);">
-                        <th style="padding: 8px; text-align: center;">#</th>
-                        <th style="padding: 8px; text-align: left;">Clan A Member</th>
-                        <th style="padding: 8px; text-align: left;">Clan B Member</th>
-                    </tr>
-                </thead>
-                <tbody>
+                    <tr></tr>
                     {roster_rows}
                 </tbody>
             </table>
@@ -405,14 +396,13 @@ async def war_conflicts():
         return get_base_html(f"War Details - {doc_id}", content)
 
     except Exception as e:
-        error_content = f"""
-        <div class="profile-card" style="border-color: var(--danger-color);">
-            <h1 style="color: var(--danger-color);">❌ Internal Fetch Failure</h1>
-            <p style="color: var(--text-muted); font-family: monospace;">{str(e)}</p>
+        error_content = style_block + f"""
+        <div id="container">
+            <span id="title">❌ Internal Fetch Failure</span><br><br>
+            <span id="top">{str(e)}</span>
         </div>
         """
         return get_base_html("Error - ClashHunt", error_content), 500
-
 
 @app.route('/push/<token>', methods=['GET'])
 async def view_push_page(token):
