@@ -328,10 +328,10 @@ async def war_conflicts():
 
             roster_rows += f"""<tr>
                 <td>{pos}</td>
-                <td>{ca_name} (<a href="#">{ca_tag}</a>)</td>
+                <td>{ca_name} (<a href="https://link.clashofclans.com/en/?action=OpenClanProfile&tag={ca_tag}">{ca_tag}</a>)</td>
                 <td>{ca_attacks}</td>
                 <td class='lb'>{pos}</td>
-                <td>{cb_name} (<a href="#">{cb_tag}</a>)</td>
+                <td>{cb_name} (<a href="https://link.clashofclans.com/en/?action=OpenClanProfile&tag={cb_tag}">{cb_tag}</a>)</td>
                 <td>{cb_attacks}</td>
             </tr>\n"""
 
