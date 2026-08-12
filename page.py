@@ -430,12 +430,12 @@ async def war_conflicts():
                     <td colspan="2" style="width:48%"><span style="color:red;"><b>Clan B</b></span></td>
                 </tr>
                 <tr>
-                    <td><img style="width: 50px; height: 50px;" src="{clan_a.get('badge')}" alt="Clash of Clans Badge"> </td>
+                    <td><img style="width: 50px; height: 50px;" src="{clan_a.get('badge', 'https://api-assets.clashofclans.com/leagues/72/e--YMyIexEQQhE4imLoJcwhYn6Uy8KqlgyY3_kFV6t4.png')}" alt="Clash of Clans Badge"> </td>
                     <td colspan="2">
                         {clan_a.get('name', 'N/A')} (<a href="https://link.clashofclans.com/en/?action=OpenClanProfile&tag={clan_a.get('tag')}">{clan_a.get('tag', '')}</a>) lvl. {clan_a.get('level', 0)}<br>
                         {clan_a.get('members_count', 0)} people, {clan_a.get('stars', 0)}★ {clan_a.get('destruction_percentage', '0.0%')} {clan_a.get('attacks_used', 0)} Attacks
                     </td>
-                    <td class="lb" style="width: 2%;"><img style="width: 50px; height: 50px;" src="{clan_b.get('badge')}" alt="Clash of Clans Badge"></td>
+                    <td class="lb" style="width: 2%;"><img style="width: 50px; height: 50px;" src="{clan_b.get('badge', 'https://api-assets.clashofclans.com/leagues/72/e--YMyIexEQQhE4imLoJcwhYn6Uy8KqlgyY3_kFV6t4.png')}" alt="Clash of Clans Badge"></td>
                     <td colspan="2">
                         {clan_b.get('name', 'N/A')} (<a href="https://link.clashofclans.com/en/?action=OpenClanProfile&tag={clan_b.get('tag')}">{clan_b.get('tag', '')}</a>) lvl. {clan_b.get('level', 0)}<br>
                         {clan_b.get('members_count', 0)} people, {clan_b.get('stars', 0)}★ {clan_b.get('destruction_percentage', '0.0%')} {clan_b.get('attacks_used', 0)} Attacks
