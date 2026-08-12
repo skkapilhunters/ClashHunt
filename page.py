@@ -328,10 +328,10 @@ async def war_conflicts():
 
             roster_rows += f"""<tr>
                 <td>{pos}</td>
-                <td>{ca_name} (<a href="https://link.clashofclans.com/en/?action=OpenClanProfile&tag={ca_tag}">{ca_tag}</a>)</td>
+                <td>{ca_name} (<a href="https://link.clashofclans.com/en/?action=OpenPlayerProfile&tag={ca_tag}">{ca_tag}</a>)</td>
                 <td>{ca_attacks}</td>
                 <td class='lb'>{pos}</td>
-                <td>{cb_name} (<a href="https://link.clashofclans.com/en/?action=OpenClanProfile&tag={cb_tag}">{cb_tag}</a>)</td>
+                <td>{cb_name} (<a href="https://link.clashofclans.com/en/?action=OpenPlayerProfile&tag={cb_tag}">{cb_tag}</a>)</td>
                 <td>{cb_attacks}</td>
             </tr>\n"""
 
@@ -424,12 +424,12 @@ async def war_conflicts():
                 <tr>
                     <td style="width:2%">&nbsp;</td>
                     <td colspan="2">
-                        {clan_a.get('name', 'N/A')} (<a href="#">{clan_a.get('tag', '')}</a>) lvl. {clan_a.get('level', 0)}<br>
+                        {clan_a.get('name', 'N/A')} (<a href="https://link.clashofclans.com/en/?action=OpenPlayerProfile&tag={clan_a.get('tag')}">{clan_a.get('tag', '')}</a>) lvl. {clan_a.get('level', 0)}<br>
                         {clan_a.get('members_count', 0)} people, {clan_a.get('stars', 0)}★ {clan_a.get('destruction_percentage', '0.0%')} {clan_a.get('attacks_used', 0)} Attacks
                     </td>
                     <td style="width:2%" class="lb">&nbsp;</td>
                     <td colspan="2">
-                        {clan_b.get('name', 'N/A')} (<a href="#">{clan_b.get('tag', '')}</a>) lvl. {clan_b.get('level', 0)}<br>
+                        {clan_b.get('name', 'N/A')} (<a href="https://link.clashofclans.com/en/?action=OpenPlayerProfile&tag={clan_b.get('tag')}">{clan_b.get('tag', '')}</a>) lvl. {clan_b.get('level', 0)}<br>
                         {clan_b.get('members_count', 0)} people, {clan_b.get('stars', 0)}★ {clan_b.get('destruction_percentage', '0.0%')} {clan_b.get('attacks_used', 0)} Attacks
                     </td>
                 </tr>
