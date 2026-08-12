@@ -295,7 +295,7 @@ async def war_conflicts():
 
         # 1. Search in MongoDB First (Primary Storage)
         # Assuming your MongoDB documents use "_id" to store the doc_id
-        mongo_doc = await mongo_collection.find_one({"_id": doc_id})
+        mongo_doc = await mongo_collection.find_one({"doc_id": doc_id})
         
         if mongo_doc:
             data = mongo_doc
