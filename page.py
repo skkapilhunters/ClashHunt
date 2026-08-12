@@ -417,20 +417,17 @@ async def war_conflicts():
             <tbody>
                 <tr>
                     <td style="width:2%">&nbsp;</td>
-                    # <td><img style="width: 50px; height: 50px;" src="https://api-assets.clashofclans.com/badges/512/iZ72bTHH7Kj30_CYE1zSt2YSsY_uzbZTq886n4nokM4.png" alt="Clash of Clans Badge"> </td>
                     <td colspan="2" style="width:48%"><span style="color:red;"><b>Clan A</b></span></td>
-                    # <td><img style="width: 50px; height: 50px;" src="{clan_b.get('badge')}" alt="Clash of Clans Badge"></td>
                     <td style="width:2%">&nbsp;</td>
                     <td colspan="2" style="width:48%"><span style="color:red;"><b>Clan B</b></span></td>
                 </tr>
                 <tr>
-                    # <td style="width:2%">&nbsp;</td>
+                    
                     <td><img style="width: 50px; height: 50px;" src="{clan_a.get('badge')}" alt="Clash of Clans Badge"> </td>
                     <td colspan="2">
                         {clan_a.get('name', 'N/A')} (<a href="https://link.clashofclans.com/en/?action=OpenClanProfile&tag={clan_a.get('tag')}">{clan_a.get('tag', '')}</a>) lvl. {clan_a.get('level', 0)}<br>
                         {clan_a.get('members_count', 0)} people, {clan_a.get('stars', 0)}★ {clan_a.get('destruction_percentage', '0.0%')} {clan_a.get('attacks_used', 0)} Attacks
                     </td>
-                    # <td style="width:2%" class="lb">&nbsp;</td>
                     <td><img style="width: 50px; height: 50px;" src="{clan_b.get('badge')}" alt="Clash of Clans Badge"></td>
                     <td colspan="2">
                         {clan_b.get('name', 'N/A')} (<a href="https://link.clashofclans.com/en/?action=OpenClanProfile&tag={clan_b.get('tag')}">{clan_b.get('tag', '')}</a>) lvl. {clan_b.get('level', 0)}<br>
