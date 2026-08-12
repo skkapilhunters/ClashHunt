@@ -15,6 +15,18 @@ app = Quart(__name__)
 # Initialize Firebase from Environment Variable
 firebase_creds_raw = os.environ.get("FIREBASE_CREDENTIALS")
 
+from motor.motor_asyncio import AsyncIOMotorClient
+
+# Initialize MongoDB (Make sure to set your MONGO_URI in your environment variables)
+MONGO_URI = os.environ.get("MONGO_URI")
+try:
+    mongo_client = AsyncIOMotorClient(MONGO_URI)
+    # Replace 'clash_tracker' and 'active_wars' with your actual DB and Collection names
+    mongo_db = mongo_client["ClashHunt"]
+    mongo_collection = mongo_db["war_conflicts"] 
+except Exception as e:
+    print(f"⚠️ Error connecting to MongoDB: {e}")
+
 if firebase_creds_raw:
     try:
         cred_dict = json.loads(firebase_creds_raw)
@@ -278,14 +290,28 @@ async def war_conflicts():
         return "Missing Document ID: Please provide a document parameter in the URL query string.", 400
 
     try:
-        # Fetch document from Firestore "ended_wars" collection
-        doc_ref = db.collection('ended_wars').document(doc_id)
-        doc = doc_ref.get()
+        data = None
+        source_db = ""
 
-        if not doc.exists:
-            return f"War Document Not Found: No war records match ID {doc_id}", 404
+        # 1. Search in MongoDB First (Primary Storage)
+        # Assuming your MongoDB documents use "_id" to store the doc_id
+        mongo_doc = await mongo_collection.find_one({"_id": doc_id})
+        
+        if mongo_doc:
+            data = mongo_doc
+            source_db = "MongoDB"
+        else:
+            # 2. Fallback to Firebase (Cold Storage) if not in MongoDB
+            doc_ref = db.collection('ended_wars').document(doc_id)
+            doc = doc_ref.get() # Note: Firebase Admin SDK get() is synchronous
 
-        data = doc.to_dict()
+            if doc.exists:
+                data = doc.to_dict()
+                source_db = "Firebase Firestore"
+            else:
+                return f"War Document Not Found: No war records match ID {doc_id} in either database.", 404
+
+        # Extract data (this remains identical to your original code)
         conflict_data = data.get('conflict_data', {})
         war_meta = conflict_data.get('war_metadata', {})
         clans = conflict_data.get('clans', {})
@@ -294,7 +320,7 @@ async def war_conflicts():
         clan_a = clans.get('clan_a', {})
         clan_b = clans.get('clan_b', {})
 
-        # Helper function to match the old attack formatting (e.g. "1. Hit #5: 3 stars 100")
+        # Helper function to match the old attack formatting
         def format_attacks(attacks_list):
             if not attacks_list or not isinstance(attacks_list, list):
                 return "No attacks"
@@ -305,7 +331,7 @@ async def war_conflicts():
                     defender = att.get('defender', '?')
                     stars = att.get('stars', 0)
                     destruction = att.get('destruction', 0)
-                    formatted.append(f"{i}. Hit #{defender}: {stars} stars {destruction}")
+                    formatted.append(f"{i}. Hit #{defender}: {stars} stars {destruction}%")
                 elif isinstance(att, str):
                     formatted.append(f"{i}. {att}")
                     
@@ -340,64 +366,19 @@ async def war_conflicts():
 <html lang="en">
 <head>
     <title>Chocolate Clash: Viewing War</title>
+    <!-- Your existing CSS remains untouched here -->
     <style>
-        body {{
-            font-family: "Times New Roman", Times, serif;
-            font-size: 16px;
-            background-color: #ffffff;
-            color: #000000;
-            margin: 0;
-            padding: 20px;
-        }}
-        #container {{
-            width: 75%;
-            margin: 20px auto;
-            border: 1px solid black;
-            text-align: center;
-            padding: 10px;
-            background-color: #ffffff;
-        }}
-        #title {{
-            font-weight: bold;
-            font-size: 32px;
-            cursor: pointer;
-            color: #000000;
-        }}
-        #top {{
-            display: block;
-            text-align: left;
-            font-size: 16px;
-        }}
-        table {{
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }}
-        td {{
-            width: inherit;
-            border-bottom: 1px solid gray;
-            font-size: 16px;
-            text-align: left;
-            padding: 4px;
-            vertical-align: top;
-            color: #000000;
-        }}
-        td.lb {{
-            border-left: 1px solid gray;
-        }}
-        a {{
-            text-decoration: none;
-            color: blue;
-        }}
-        a:visited {{
-            color: blue;
-        }}
-        #credits {{
-            text-align: center;
-            font-size: 16px;
-            margin-top: 20px;
-            color: #000000;
-        }}
+        body {{ font-family: "Times New Roman", Times, serif; font-size: 16px; background-color: #ffffff; color: #000000; margin: 0; padding: 20px; }}
+        #container {{ width: 75%; margin: 20px auto; border: 1px solid black; text-align: center; padding: 10px; background-color: #ffffff; }}
+        #title {{ font-weight: bold; font-size: 32px; cursor: pointer; color: #000000; }}
+        #top {{ display: block; text-align: left; font-size: 16px; }}
+        table {{ width: 100%; border-collapse: collapse; margin-top: 20px; }}
+        td {{ width: inherit; border-bottom: 1px solid gray; font-size: 16px; text-align: left; padding: 4px; vertical-align: top; color: #000000; }}
+        td.lb {{ border-left: 1px solid gray; }}
+        a {{ text-decoration: none; color: blue; }}
+        a:visited {{ color: blue; }}
+        #credits {{ text-align: center; font-size: 16px; margin-top: 20px; color: #000000; }}
+        .db-badge {{ font-size: 12px; color: green; font-weight: bold; float: right; }}
     </style>
 </head>
 <body>
@@ -405,7 +386,8 @@ async def war_conflicts():
         <span id="title">FWA ChocolateClash</span>
         <br><br>
         <span id="top">
-            Showing details for a saved clan war. (<a href="#">Show flags & NIC</a>)<br><br>
+            Showing details for a saved clan war. (<a href="#">Show flags & NIC</a>)
+            <span class="db-badge">Loaded from {source_db}</span><br><br>
             <b>Prep. Day Start: </b>{war_meta.get('prep_day_start', 'N/A')}<br>
             <b>Battle Day Start: </b>{war_meta.get('battle_day_start', 'N/A')}<br>
             <b>War Ends: </b>{war_meta.get('war_ends', 'N/A')}<br><br>
@@ -415,14 +397,6 @@ async def war_conflicts():
         </span>
         <table>
             <tbody>
-
-
-
-
-
-
-
-            
                 <tr>
                     <td style="width:2%">&nbsp;</td>
                     <td colspan="2" style="width:48%"><span style="color:red;"><b>Clan A</b></span></td>
@@ -430,12 +404,12 @@ async def war_conflicts():
                     <td colspan="2" style="width:48%"><span style="color:red;"><b>Clan B</b></span></td>
                 </tr>
                 <tr>
-                    <td><img style="width: 50px; height: 50px;" src="{clan_a.get('badge', 'https://api-assets.clashofclans.com/leagues/72/e--YMyIexEQQhE4imLoJcwhYn6Uy8KqlgyY3_kFV6t4.png')}" alt="Clash of Clans Badge"> </td>
+                    <td><img style="width: 50px; height: 50px;" src="{clan_a.get('badge')}" alt="Clash of Clans Badge"> </td>
                     <td colspan="2">
                         {clan_a.get('name', 'N/A')} (<a href="https://link.clashofclans.com/en/?action=OpenClanProfile&tag={clan_a.get('tag')}">{clan_a.get('tag', '')}</a>) lvl. {clan_a.get('level', 0)}<br>
                         {clan_a.get('members_count', 0)} people, {clan_a.get('stars', 0)}★ {clan_a.get('destruction_percentage', '0.0%')} {clan_a.get('attacks_used', 0)} Attacks
                     </td>
-                    <td class="lb" style="width: 2%;"><img style="width: 50px; height: 50px;" src="{clan_b.get('badge', 'https://api-assets.clashofclans.com/leagues/72/e--YMyIexEQQhE4imLoJcwhYn6Uy8KqlgyY3_kFV6t4.png')}" alt="Clash of Clans Badge"></td>
+                    <td class="lb" style="width: 2%;"><img style="width: 50px; height: 50px;" src="{clan_b.get('badge')}" alt="Clash of Clans Badge"></td>
                     <td colspan="2">
                         {clan_b.get('name', 'N/A')} (<a href="https://link.clashofclans.com/en/?action=OpenClanProfile&tag={clan_b.get('tag')}">{clan_b.get('tag', '')}</a>) lvl. {clan_b.get('level', 0)}<br>
                         {clan_b.get('members_count', 0)} people, {clan_b.get('stars', 0)}★ {clan_b.get('destruction_percentage', '0.0%')} {clan_b.get('attacks_used', 0)} Attacks
@@ -453,7 +427,6 @@ async def war_conflicts():
 </body>
 </html>"""
         
-        # Return full HTML directly with a 200 OK status
         return full_html, 200
 
     except Exception as e:
