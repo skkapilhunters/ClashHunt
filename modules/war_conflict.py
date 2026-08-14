@@ -9,7 +9,8 @@ from modules.scraper import scrape_fwa_details
 # Import Firebase exporter module
 from modules.firebase_exporter import export_war_to_firebase
 
-BASE_GATEWAY = "https://clash-hunt-api.vercel.app/proxy"
+# UPDATED: New Supabase API Gateway
+BASE_GATEWAY = "https://otbsecnrlgkpmomgwrtx.supabase.co/functions/v1/coc-api"
 
 def normalize_tag(tag: str) -> str:
     """Normalizes Clash of Clans tags."""
@@ -142,19 +143,28 @@ def build_war_json(war_data: dict) -> dict:
 async def generate_and_store_war_conflict(clan_tag: str, guild_id: int, db_collection) -> tuple[dict | None, str | None]:
     """
     Main function called by WarTracker:
-    1. Fetches live CoC API war data
+    1. Fetches live CoC API war data using the new Supabase endpoint
     2. Runs Web Scraper & builds conflict JSON payload
     3. IF 'War Ended': Exports to Firebase & DELETES entry from MongoDB
     4. ELSE (ongoing war): Upserts payload into MongoDB
     """
     clean_tag = normalize_tag(clan_tag)
-    params = {"endpoint": "clans", "tag": clean_tag, "suffix": "currentwar"}
+    
+    # UPDATED: New payload structure for POST request
+    payload = {
+        "action": "current_war",
+        "tag": clean_tag
+    }
 
     async with aiohttp.ClientSession() as session:
-        async with session.get(BASE_GATEWAY, params=params) as response:
+        # UPDATED: Sending a POST request with JSON body and headers
+        async with session.post(BASE_GATEWAY, json=payload, headers={'Content-Type': 'application/json'}) as response:
             if response.status != 200:
                 return None, f"Proxy error HTTP {response.status}"
-            war_data = await response.json()
+            raw_response = await response.json()
+            
+            # UPDATED: Replicating the JS extractData logic to handle nested Supabase responses
+            war_data = raw_response.get("war") or raw_response.get("currentWar") or raw_response.get("data") or raw_response
 
     if war_data.get("state") == "notInWar":
         return None, "notInWar"
