@@ -14,7 +14,9 @@ from motor.motor_asyncio import AsyncIOMotorClient  # type: ignore
 
 load_dotenv()
 MONGO_URI = os.getenv("MONGO_URI")
-BASE_GATEWAY = "https://clash-hunt-api.vercel.app/proxy"
+
+# UPDATED: New Supabase API Gateway
+BASE_GATEWAY = "https://otbsecnrlgkpmomgwrtx.supabase.co/functions/v1/coc-api"
 
 
 # --- SAFE AUTOCOMPLETE DROPDOWN FILTER (SERVER SCOPED) ---
@@ -159,10 +161,10 @@ class WarTracker(commands.Cog):
     """Generates visual Discord Embed for /checkwar and auto-posts."""
     clean_tag = f"#{clan_tag.upper().replace('#', '').strip()}"
 
-    params = {
-        "endpoint": "clans",
-        "tag": clean_tag,
-        "suffix": "currentwar",
+    # UPDATED: Use POST payload instead of query parameters
+    payload = {
+        "action": "current_war",
+        "tag": clean_tag
     }
 
     # Reusing self.session or fallback session
@@ -170,12 +172,16 @@ class WarTracker(commands.Cog):
     should_close = self.session is None
 
     try:
-      async with session_to_use.get(
-          BASE_GATEWAY, params=params
+      # UPDATED: Send POST request
+      async with session_to_use.post(
+          BASE_GATEWAY, json=payload, headers={'Content-Type': 'application/json'}
       ) as response:
         if response.status != 200:
           return None, None, f"Proxy Error (Status: {response.status})"
-        war_data = await response.json()
+        
+        # UPDATED: Extract nested data
+        raw_response = await response.json()
+        war_data = raw_response.get("war") or raw_response.get("currentWar") or raw_response.get("data") or raw_response
     finally:
       if should_close:
         await session_to_use.close()
@@ -261,13 +267,18 @@ class WarTracker(commands.Cog):
 
       try:
         # 1. Fetch current war state via API using persistent session
-        params = {"endpoint": "clans", "tag": tag, "suffix": "currentwar"}
-        async with self.session.get(
-            BASE_GATEWAY, params=params
+        # UPDATED: Use POST payload
+        payload = {"action": "current_war", "tag": tag}
+        
+        async with self.session.post(
+            BASE_GATEWAY, json=payload, headers={'Content-Type': 'application/json'}
         ) as response:
           if response.status != 200:
             continue
-          war_data = await response.json()
+          
+          # UPDATED: Extract nested data
+          raw_response = await response.json()
+          war_data = raw_response.get("war") or raw_response.get("currentWar") or raw_response.get("data") or raw_response
 
         current_state = war_data.get("state")
 
@@ -382,15 +393,20 @@ class WarTracker(commands.Cog):
       )
       return
 
-    params = {"endpoint": "clans", "tag": formatted_tag, "suffix": ""}
+    # UPDATED: Use POST payload to search for the clan
+    payload = {"action": "search_clan", "tag": formatted_tag}
+    
     async with aiohttp.ClientSession() as session:
-      async with session.get(BASE_GATEWAY, params=params) as response:
+      async with session.post(BASE_GATEWAY, json=payload, headers={'Content-Type': 'application/json'}) as response:
         if response.status != 200:
           await interaction.followup.send(
               "❌ Registration rejected. Please check tag."
           )
           return
-        data = await response.json()
+        
+        # UPDATED: Extract nested data
+        raw_response = await response.json()
+        data = raw_response.get("clan") or raw_response.get("data") or raw_response
         clan_name = data.get("name", "Unknown Clan")
 
     await self.db_add_clan(
